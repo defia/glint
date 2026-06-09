@@ -121,7 +121,7 @@ if entries:
 else:
     body = "<p>Maintenance release · 维护更新</p>"
 
-notes_html = (
+current_html = (
     "<div style=\"font-family:-apple-system,sans-serif;\">"
     f"<h3>更新内容 · What's new in {html.escape(version)}</h3>"
     f"{body}"
@@ -142,6 +142,48 @@ for item in list(channel.findall("item")):
     v = item.find(f"{{{SPARKLE}}}version")
     if v is not None and v.text == build_number:
         channel.remove(item)
+
+# Pull every remaining item's description (in the order they appear, which is
+# newest-first) so we can fold the full history into THIS item's notes.
+# Sparkle only renders the description of the item the user is upgrading to,
+# so a user crossing several versions would otherwise miss everything between
+# their installed build and the latest one. Concatenating older descriptions
+# below the current one keeps a single, scrollable "what changed since you
+# last updated" view.
+#
+# Each prior description may already contain its own history block (appended
+# the last time THAT item was written). We split on the separator marker so
+# we only carry each version's own notes — otherwise the latest item's
+# description would grow quadratically on every release.
+HISTORY_MARKER = "<!--GLINT_HISTORY_BELOW-->"
+SEPARATOR_HTML = (
+    "<hr style=\"border:none;border-top:1px solid #e5e5e5;margin:16px 0;\">"
+)
+
+history_chunks = []
+for prev in channel.findall("item"):
+    d = prev.find("description")
+    if d is None or not d.text:
+        continue
+    own = d.text.split(HISTORY_MARKER, 1)[0].strip()
+    if own:
+        history_chunks.append(own)
+
+if history_chunks:
+    history_header = (
+        "<div style=\"font-family:-apple-system,sans-serif;\">"
+        "<h3 style=\"color:#666;\">历史版本 · Previous releases</h3>"
+        "</div>"
+    )
+    notes_html = (
+        current_html
+        + HISTORY_MARKER
+        + SEPARATOR_HTML
+        + history_header
+        + SEPARATOR_HTML.join(history_chunks)
+    )
+else:
+    notes_html = current_html
 
 NOTES_PLACEHOLDER = "__GLINT_NOTES_CDATA_PLACEHOLDER__"
 
