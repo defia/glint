@@ -102,6 +102,17 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           cp -R build/Glint.xcarchive/Products/Applications/Glint.app dist/
+          # Replace the broken linker-signed ad-hoc signature with a real
+          # ad-hoc codesign. Xcode's linker-signed bundles fail
+          # `SecStaticCodeCheckValidity` with "code has no resources but
+          # signature indicates they must be present" because there's no
+          # _CodeSignature/CodeResources manifest. Sparkle runs the same
+          # check during install and rejects the update as "not properly
+          # signed". `codesign --force --deep --sign -` rebuilds the
+          # signature blob *and* writes the resources manifest, so the
+          # bundle now validates even without a Developer ID certificate.
+          codesign --force --deep --sign - dist/Glint.app
+          codesign --verify --verbose dist/Glint.app
 
       # ─── Optional: Apple Developer ID signing + notarization ───────────
       # Skipped automatically when APPLE_CERT_P12_BASE64 secret is not set,
