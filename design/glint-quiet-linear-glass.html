@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Glint · Quiet Linear Glass</title>
+  <style>
+    :root {
+      --page: #030407;
+      --window: #090a10;
+      --pane: #080812;
+      --sidebar-top: rgba(23, 22, 35, 0.92);
+      --sidebar-bottom: rgba(12, 12, 20, 0.96);
+      --toolbar: rgba(20, 19, 30, 0.88);
+      --status: rgba(8, 8, 14, 0.92);
+      --line: rgba(255,255,255,0.055);
+      --line-soft: rgba(255,255,255,0.03);
+      --text-1: #ececf4;
+      --text-2: #b8b9c8;
+      --text-3: #828598;
+      --text-4: #55596b;
+      --accent: #7c82e0;
+      --accent-2: #a4a8f5;
+      --pink: #ff6482;
+      --cyan: #64d2ff;
+      --green: #30d158;
+      --amber: #ff9f0a;
+      --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+      --ui: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      color: var(--text-1);
+      font-family: var(--ui);
+      background:
+        radial-gradient(900px 520px at 50% -24%, rgba(124,130,224,0.11), transparent 64%),
+        radial-gradient(860px 460px at 2% 44%, rgba(255,100,130,0.045), transparent 70%),
+        #000;
+      display: grid;
+      place-items: center;
+      letter-spacing: 0;
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.018;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    .stage {
+      width: min(1840px, calc(100vw - 96px));
+      height: min(1080px, calc(100vh - 96px));
+      display: grid;
+      place-items: center;
+    }
+
+    .window {
+      width: 100%;
+      height: 100%;
+      max-height: 1080px;
+      min-height: 720px;
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      overflow: hidden;
+      border: 1px solid rgba(182,185,214,0.18);
+      border-radius: 22px;
+      background: var(--window);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.08),
+        inset 0 0 0 0.5px rgba(255,255,255,0.035),
+        0 52px 120px rgba(0,0,0,0.72),
+        0 18px 44px rgba(0,0,0,0.55);
+    }
+
+    .sidebar {
+      display: grid;
+      grid-template-rows: 50px auto 76px;
+      background:
+        linear-gradient(180deg, var(--sidebar-top), var(--sidebar-bottom)),
+        radial-gradient(560px 340px at 0% 0%, rgba(124,130,224,0.14), transparent 70%);
+      border-right: 1px solid var(--line);
+      position: relative;
+    }
+
+    .sidebar::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(90deg, rgba(255,255,255,0.028), transparent 38%);
+    }
+
+    .traffic {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 20px;
+    }
+    .traffic i {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.28);
+    }
+    .traffic i:nth-child(1) { background: linear-gradient(#ff7772, #ff4f58); }
+    .traffic i:nth-child(2) { background: linear-gradient(#ffd05d, #ffb51f); }
+    .traffic i:nth-child(3) { background: linear-gradient(#48df70, #28c84a); }
+
+    .sidebar-body {
+      min-height: 0;
+      padding: 0 14px 14px;
+    }
+
+    .search {
+      height: 32px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 11px;
+      border-radius: 8px;
+      color: var(--text-4);
+      background: rgba(255,255,255,0.045);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+      font-size: 13px;
+      margin: 2px 0 22px;
+    }
+    .search svg { width: 14px; height: 14px; opacity: 0.78; }
+    .search .hint {
+      margin-left: auto;
+      font: 600 10px var(--mono);
+      color: #8c8fa4;
+      background: rgba(255,255,255,0.055);
+      border: 1px solid rgba(255,255,255,0.035);
+      padding: 2px 5px 1px;
+      border-radius: 4px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      color: var(--text-4);
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      margin: 0 6px 8px;
+    }
+    .section-head span:last-child {
+      margin-left: auto;
+      font-family: var(--mono);
+      letter-spacing: 0;
+      font-weight: 500;
+    }
+
+    .workspace-list { display: grid; gap: 2px; }
+
+    .workspace {
+      position: relative;
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      align-items: center;
+      column-gap: 10px;
+      min-height: 52px;
+      padding: 7px 9px 7px 10px;
+      border-radius: 9px;
+      color: var(--text-2);
+    }
+    .workspace.active {
+      background:
+        linear-gradient(90deg, rgba(124,130,224,0.12), rgba(255,255,255,0.038) 48%, rgba(255,255,255,0.018));
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.045),
+        inset 0 0 0 1px rgba(124,130,224,0.12);
+    }
+    .workspace.active::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 9px;
+      bottom: 9px;
+      width: 2px;
+      border-radius: 2px;
+      background: linear-gradient(var(--accent-2), var(--accent));
+      box-shadow: 0 0 16px rgba(124,130,224,0.72);
+    }
+
+    .ws-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: white;
+      font: 700 11px var(--mono);
+      background: linear-gradient(135deg, #6266dc, #8d88ff);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 8px 22px rgba(94,92,230,0.22);
+    }
+    .workspace:not(.active) .ws-icon {
+      background: rgba(255,255,255,0.07);
+      color: #9fa2ba;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+    }
+    .ws-main {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+    .ws-name {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 13.5px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      color: var(--text-1);
+    }
+    .workspace:not(.active) .ws-name { color: #d2d3de; font-weight: 560; }
+    .ws-meta {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      color: var(--text-4);
+      font: 500 11.5px var(--mono);
+    }
+    .branch {
+      color: var(--text-4);
+      font: 500 11px var(--mono);
+      max-width: 58px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .new {
+      align-self: end;
+      margin: 0 14px 14px;
+      height: 46px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 12px;
+      border-radius: 10px;
+      color: var(--text-3);
+      border: 1px dashed rgba(255,255,255,0.075);
+      background: rgba(255,255,255,0.018);
+      font-size: 12.5px;
+    }
+    .new i {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      background: rgba(255,255,255,0.035);
+      color: var(--text-3);
+      font-style: normal;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .main {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 46px 1fr 26px;
+      background: var(--pane);
+      position: relative;
+    }
+    .main::before {
+      content: "";
+      position: absolute;
+      inset: 46px 0 26px;
+      pointer-events: none;
+      background:
+        radial-gradient(900px 360px at 48% -8%, rgba(124,130,224,0.045), transparent 65%),
+        linear-gradient(180deg, rgba(255,255,255,0.012), transparent 17%);
+    }
+
+    .toolbar {
+      height: 46px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      padding: 0 18px;
+      background: linear-gradient(180deg, rgba(25,24,36,0.92), var(--toolbar));
+      border-bottom: 1px solid var(--line);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.045);
+      position: relative;
+      z-index: 2;
+    }
+    .toolbar-left, .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-3);
+    }
+    .toolbar-right { justify-content: flex-end; gap: 4px; }
+    .icon-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      color: var(--text-3);
+    }
+    .icon-btn svg { width: 15px; height: 15px; }
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      color: var(--text-1);
+      font-weight: 650;
+      font-size: 13.5px;
+      letter-spacing: -0.01em;
+    }
+    .brand img {
+      width: 23px;
+      height: 23px;
+      filter: drop-shadow(0 0 9px rgba(255,100,130,0.32));
+    }
+    .context {
+      justify-self: center;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--text-3);
+      font: 500 11.5px var(--mono);
+    }
+    .context .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 10px rgba(48,209,88,0.7);
+    }
+    .context b {
+      color: #cfd1de;
+      font-weight: 600;
+    }
+    .context em {
+      color: var(--text-4);
+      font-style: normal;
+    }
+
+    .terminal {
+      position: relative;
+      z-index: 1;
+      min-height: 0;
+      padding: 24px 26px 36px;
+      font-family: var(--mono);
+      font-size: 14px;
+      line-height: 1.55;
+      color: #d9d9e7;
+    }
+    .terminal-grid {
+      max-width: 980px;
+      display: grid;
+      gap: 20px;
+    }
+    .login {
+      color: var(--text-3);
+      font-size: 13px;
+    }
+    .command-block {
+      position: relative;
+      padding: 15px 0 0 19px;
+      border-top: 1px solid transparent;
+      border-image: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent) 1;
+    }
+    .command-block.active::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 17px;
+      bottom: 6px;
+      width: 2px;
+      border-radius: 2px;
+      background: linear-gradient(var(--accent-2), var(--accent));
+      box-shadow: 0 0 18px rgba(124,130,224,0.55);
+    }
+    .prompt {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .path { color: #dfe0ea; font-weight: 650; font-family: var(--ui); }
+    .home { color: var(--text-4); font-weight: 550; }
+    .arrow { color: var(--accent-2); text-shadow: 0 0 12px rgba(164,168,245,0.4); }
+    .cmd { color: var(--text-1); }
+    .time {
+      margin-left: auto;
+      color: var(--text-4);
+      font-size: 11px;
+    }
+    .out { color: #aeb1c4; }
+    .out .green { color: #6ce890; }
+    .out .cyan { color: #77dfff; }
+    .out .amber { color: #f0bc63; }
+    .out .pink { color: #f0a4d0; }
+    .ghost { color: #5f6376; font-style: italic; }
+    .cursor-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 2px;
+    }
+    .cursor {
+      width: 2px;
+      height: 18px;
+      border-radius: 2px;
+      background: #fff;
+      box-shadow: 0 0 14px rgba(164,168,245,0.78), 0 0 26px rgba(255,100,130,0.28);
+    }
+
+    .statusbar {
+      height: 26px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 18px;
+      border-top: 1px solid var(--line-soft);
+      background: var(--status);
+      color: var(--text-4);
+      font: 500 11px var(--mono);
+      position: relative;
+      z-index: 2;
+    }
+    .statusbar .ok {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: #a8abbf;
+    }
+    .statusbar .ok::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 9px rgba(48,209,88,0.75);
+    }
+    .statusbar .right {
+      margin-left: auto;
+      display: flex;
+      gap: 14px;
+    }
+
+    @media (max-width: 1100px) {
+      .stage { width: calc(100vw - 32px); height: calc(100vh - 32px); }
+      .window { grid-template-columns: 248px 1fr; border-radius: 18px; }
+      .context { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <section class="window" aria-label="Glint terminal mockup">
+      <aside class="sidebar">
+        <div class="traffic"><i></i><i></i><i></i></div>
+        <div class="sidebar-body">
+          <div class="search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16.5 16.5 4 4"/></svg>
+            <span>搜索</span>
+            <span class="hint">⌘K</span>
+          </div>
+          <div class="section-head"><span>Workspaces</span><span>2</span></div>
+          <div class="workspace-list">
+            <div class="workspace active">
+              <div class="ws-icon">›_</div>
+              <div class="ws-main">
+                <div class="ws-name">~/work/private</div>
+                <div class="ws-meta">1 pane · ~/work/private</div>
+              </div>
+              <div class="branch">main</div>
+            </div>
+            <div class="workspace">
+              <div class="ws-icon">›_</div>
+              <div class="ws-main">
+                <div class="ws-name">~/work</div>
+                <div class="ws-meta">1 pane · ~/work</div>
+              </div>
+              <div class="branch">clean</div>
+            </div>
+          </div>
+        </div>
+        <div class="new"><i>+</i><span>新建工作区</span></div>
+      </aside>
+
+      <section class="main">
+        <header class="toolbar">
+          <div class="toolbar-left">
+            <div class="icon-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 4v16"/></svg>
+            </div>
+            <div class="brand">
+              <img src="../Glint/Resources/Assets.xcassets/GlintLogo.imageset/glint-logo.png" alt="" />
+              <span>Glint</span>
+            </div>
+          </div>
+          <div class="context">
+            <b>private</b><em>·</em><span>main</span><em>·</em><span class="dot"></span><span>clean</span>
+          </div>
+          <div class="toolbar-right">
+            <div class="icon-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 7H8a4 4 0 1 0 4 4V5a3 3 0 1 0-3 3h10a4 4 0 1 1-4 4V5a3 3 0 1 1 3 3"/></svg>
+            </div>
+            <div class="icon-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="M19.4 15a1.6 1.6 0 0 0 .32 1.76l.05.05a1.9 1.9 0 1 1-2.69 2.69l-.05-.05a1.6 1.6 0 0 0-1.76-.32 1.6 1.6 0 0 0-.97 1.47v.14a1.9 1.9 0 1 1-3.8 0v-.08a1.6 1.6 0 0 0-1.04-1.5 1.6 1.6 0 0 0-1.76.32l-.05.05a1.9 1.9 0 1 1-2.69-2.69l.05-.05A1.6 1.6 0 0 0 4.8 15a1.6 1.6 0 0 0-1.47-.97h-.14a1.9 1.9 0 1 1 0-3.8h.08a1.6 1.6 0 0 0 1.5-1.04 1.6 1.6 0 0 0-.32-1.76l-.05-.05A1.9 1.9 0 1 1 7.1 4.7l.05.05a1.6 1.6 0 0 0 1.76.32H9a1.6 1.6 0 0 0 .97-1.47v-.14a1.9 1.9 0 1 1 3.8 0v.08a1.6 1.6 0 0 0 .97 1.47 1.6 1.6 0 0 0 1.76-.32l.05-.05a1.9 1.9 0 1 1 2.69 2.69l-.05.05a1.6 1.6 0 0 0-.32 1.76v.08a1.6 1.6 0 0 0 1.47.97h.14a1.9 1.9 0 1 1 0 3.8h-.08A1.6 1.6 0 0 0 19.4 15Z"/></svg>
+            </div>
+          </div>
+        </header>
+
+        <div class="terminal">
+          <div class="terminal-grid">
+            <div class="login">Last login: Tue Jun&nbsp;&nbsp;9 16:20:45 on ttys015</div>
+            <div class="command-block">
+              <div class="prompt"><span class="path"><span class="home">~</span>/work/private</span><span class="arrow">❯</span><span class="cmd">glint doctor</span><span class="time">16:21</span></div>
+              <div class="out">
+                <span class="green">✓</span> GhosttyKit linked<br>
+                <span class="green">✓</span> Workspace persistence ready<br>
+                <span class="cyan">info</span> App icon assets detected · <span class="amber">1024</span>px source
+              </div>
+            </div>
+            <div class="command-block active">
+              <div class="prompt"><span class="path"><span class="home">~</span>/work/private</span><span class="arrow">❯</span><span class="cmd">cargo run --release</span><span class="time">16:24</span></div>
+              <div class="out">
+                Compiling <span class="pink">glint</span> v0.1.0<br>
+                Finished <span class="green">release</span> profile in <span class="amber">1.84s</span><br>
+                Running <span class="cyan">target/release/Glint</span>
+              </div>
+              <div class="cursor-line"><span class="path"><span class="home">~</span>/work/private</span><span class="arrow">❯</span><span class="cursor"></span><span class="ghost">tab for completions</span></div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="statusbar">
+          <span class="ok">connected</span>
+          <span>⌁ main</span>
+          <span>clean</span>
+          <span>1×panes</span>
+          <span class="right"><span>UTF-8</span><span>zsh 5.9</span><span>⌘D split</span><span>⌘W close</span></span>
+        </footer>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

@@ -35,7 +35,7 @@ if [ -d "$TARGET" ] && [ -f "$TARGET/Info.plist" ] && [ -f "$MARKER" ]; then
   echo "Vendor SHA mismatch — rebuilding for ghostty $GHOSTTY_TAG."
 fi
 
-REQUIRED_ZIG="$(grep -oE '"[0-9]+\.[0-9]+\.[0-9]+"' "$GHOSTTY/build.zig.zon" | head -n1 | tr -d '"')"
+REQUIRED_ZIG="$(grep 'minimum_zig_version' "$GHOSTTY/build.zig.zon" | grep -oE '"[0-9]+\.[0-9]+\.[0-9]+"' | head -n1 | tr -d '"')"
 if [ -z "$REQUIRED_ZIG" ]; then REQUIRED_ZIG="0.15.2"; fi
 
 if ! command -v zig >/dev/null 2>&1; then
@@ -63,12 +63,17 @@ Continuing anyway in case ghostty has loosened the requirement…
 EOF
 fi
 
-echo "Building GhosttyKit from ghostty $GHOSTTY_TAG (this can take 10-20 min on a cold cache)…"
+# Default to a native (current-arch only) build because ghostty's universal
+# build cross-compiles x86_64 from arm64 runners and fails under recent
+# Xcode toolchains. Override by exporting GHOSTTYKIT_TARGET=universal once
+# Intel support is needed.
+TARGET="${GHOSTTYKIT_TARGET:-native}"
+echo "Building GhosttyKit from ghostty $GHOSTTY_TAG (target=$TARGET, 10-20 min on cold cache)…"
 (
   cd "$GHOSTTY"
   zig build \
     -Demit-xcframework=true \
-    -Dxcframework-target=universal \
+    "-Dxcframework-target=$TARGET" \
     -Doptimize=ReleaseFast
 )
 
