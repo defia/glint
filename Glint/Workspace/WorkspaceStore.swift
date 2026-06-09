@@ -316,6 +316,15 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(soundOnTurnComplete, forKey: "glint.soundOnTurnComplete") }
     }
 
+    /// Float workspaces whose agents just finished a turn (`.justCompleted`)
+    /// to the top of the sidebar list. The status auto-clears when the user
+    /// focuses that workspace's pane, so the card sinks back to its drag-
+    /// assigned slot — i.e. this is a soft visual nudge, not a permanent
+    /// reorder. Defaults to off so existing users see no change.
+    @Published var sortCompletedFirst: Bool = (UserDefaults.standard.object(forKey: "glint.sortCompletedFirst") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(sortCompletedFirst, forKey: "glint.sortCompletedFirst") }
+    }
+
     /// Re-run the hook installer and refresh `claudeHooksInstalled`.
     func installClaudeHooks() {
         AgentHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
@@ -685,6 +694,21 @@ final class WorkspaceStore: ObservableObject {
             workspaces[i].name = trimmed
             workspaces[i].userNamed = true
         }
+    }
+
+    /// Reorder a workspace within the sidebar list. `targetIndex` is the
+    /// index of the card the user dropped onto, in the unfiltered
+    /// `workspaces` array; we resolve "before vs after" the same way
+    /// `Array.move(fromOffsets:toOffset:)` does — if the source is above
+    /// the target the source lands at `targetIndex` (after the target),
+    /// otherwise at `targetIndex` (before the target). No-ops if either id
+    /// is unknown or source == target.
+    func moveWorkspace(id: UUID, to targetIndex: Int) {
+        guard let source = workspaces.firstIndex(where: { $0.id == id }) else { return }
+        let clamped = max(0, min(targetIndex, workspaces.count - 1))
+        if source == clamped { return }
+        let offset = source < clamped ? clamped + 1 : clamped
+        workspaces.move(fromOffsets: IndexSet(integer: source), toOffset: offset)
     }
 
     func addWorkspace() {

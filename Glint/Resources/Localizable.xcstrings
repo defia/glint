@@ -58,6 +58,8 @@
     "Start with the sidebar hidden. ⌃⌘S to toggle." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动时隐藏侧栏。⌘\\ 切换。" } } } },
     "Start with the sidebar hidden. ⌘\\ to toggle." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动时隐藏侧栏。⌘\\ 切换。" } } } },
     "Start with the sidebar hidden. ⌘/ to toggle." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动时隐藏侧栏。⌘/ 切换。" } } } },
+    "Float just-completed to top" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "刚完成的置顶" } } } },
+    "Bubble workspaces whose agent just finished a turn to the top of the sidebar. Sinks back when you open it." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 刚完成一轮的工作区会浮到侧栏顶部,打开后会落回原位。" } } } },
     "Workspaces" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工作区" } } } },
     "Total workspaces stored locally." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地存储的工作区总数。" } } } },
     "Auto-name new workspaces" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动命名新建工作区" } } } },

@@ -414,6 +414,12 @@ private struct GeneralPane: View {
                 Toggle("", isOn: $store.sidebarCollapsed)
                     .toggleStyle(.switch).labelsHidden()
             }
+            SettingsDivider()
+            SettingsRow("Float just-completed to top",
+                        subtitle: "Bubble workspaces whose agent just finished a turn to the top of the sidebar. Sinks back when you open it.") {
+                Toggle("", isOn: $store.sortCompletedFirst)
+                    .toggleStyle(.switch).labelsHidden()
+            }
         }
 
         UpdatesCard()

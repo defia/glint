@@ -4,6 +4,10 @@ struct SidebarView: View {
     @EnvironmentObject var store: WorkspaceStore
     @State private var searchText: String = ""
     @FocusState private var searchFocused: Bool
+    /// UUID of the workspace card currently mid-drag. Set by the dragged
+    /// card's preview onAppear and cleared on the preview's onDisappear,
+    /// so every sibling can render its insertion indicator relative to it.
+    @State private var draggingWorkspaceID: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,11 +26,13 @@ struct SidebarView: View {
                     sectionHeader("Workspaces", count: filteredWorkspaces.count)
                     VStack(spacing: 6) {
                         ForEach(filteredWorkspaces) { ws in
-                            WorkspaceCard(ws: ws)
+                            WorkspaceCard(ws: ws, draggingID: $draggingWorkspaceID)
                         }
                     }
                     .padding(.horizontal, 10)
                     .padding(.top, 2)
+                    .animation(.spring(response: 0.32, dampingFraction: 0.85),
+                               value: filteredWorkspaces.map(\.id))
                 }
                 .padding(.bottom, 12)
             }
@@ -43,11 +49,26 @@ struct SidebarView: View {
 
     private var filteredWorkspaces: [Workspace] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return store.workspaces }
-        return store.workspaces.filter { ws in
-            ws.displayName.lowercased().contains(query)
-                || ws.name.lowercased().contains(query)
+        let base: [Workspace]
+        if query.isEmpty {
+            base = store.workspaces
+        } else {
+            base = store.workspaces.filter { ws in
+                ws.displayName.lowercased().contains(query)
+                    || ws.name.lowercased().contains(query)
+            }
         }
+        guard store.sortCompletedFirst else { return base }
+        // Stable partition: `.justCompleted` first, preserving the user's
+        // drag-assigned order within each group. Using enumerated() +
+        // offset as the tiebreaker keeps the sort deterministic regardless
+        // of `sorted(by:)` stability guarantees.
+        return base.enumerated().sorted { lhs, rhs in
+            let lhsDone = store.agentSummary(for: lhs.element)?.status == .justCompleted
+            let rhsDone = store.agentSummary(for: rhs.element)?.status == .justCompleted
+            if lhsDone != rhsDone { return lhsDone }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
     }
 
     private var newWorkspaceCard: some View {
@@ -141,10 +162,18 @@ struct SidebarView: View {
 private struct WorkspaceCard: View {
     @EnvironmentObject var store: WorkspaceStore
     let ws: Workspace
+    @Binding var draggingID: UUID?
 
     @State private var isEditing = false
     @State private var draftName = ""
     @FocusState private var nameFieldFocused: Bool
+    /// Timestamp of the last reorder this card was the *target* of. Used
+    /// to swallow the spring-animation sweep: after we swap, the target
+    /// card slides under the cursor again mid-animation and SwiftUI re-
+    /// fires `isTargeted`, which would bounce the dragged card back. A
+    /// short cooldown matched to the spring response kills the oscillation
+    /// without affecting genuine user-intent swaps onto a different card.
+    @State private var lastTargetedAt: Date = .distantPast
 
     var body: some View {
         let active = store.selectedWorkspaceID == ws.id
@@ -202,6 +231,53 @@ private struct WorkspaceCard: View {
                 store.deleteWorkspace(ws.id)
             }
         }
+        .draggable(ws.id.uuidString) {
+            // The preview view's lifecycle is the cleanest drag-lifecycle
+            // signal SwiftUI exposes for `.draggable` — onAppear when the
+            // drag session starts, onDisappear when it ends (drop OR
+            // cancel). We use it to drive `draggingID` so sibling cards
+            // can render their insert indicator and fade the source.
+            dragPreview
+                .onAppear { draggingID = ws.id }
+                .onDisappear {
+                    if draggingID == ws.id { draggingID = nil }
+                }
+        }
+        .dropDestination(for: String.self) { items, _ in
+            // The actual reorder already happened while hovering — see the
+            // `isTargeted` branch below. Returning true just confirms the
+            // drop so SwiftUI doesn't snap the preview back.
+            guard let raw = items.first,
+                  let sourceID = UUID(uuidString: raw),
+                  sourceID != ws.id
+            else { return false }
+            return true
+        } isTargeted: { targeted in
+            // Real-time reorder: as soon as the cursor enters another card,
+            // slide the dragged workspace into that slot. The ForEach's
+            // spring animation handles the visual rearrangement.
+            guard targeted,
+                  let draggingID,
+                  draggingID != ws.id,
+                  let targetIdx = store.workspaces.firstIndex(where: { $0.id == ws.id })
+            else { return }
+            // Spring-sweep guard: after we swap, this same card animates
+            // back under the cursor and `isTargeted` re-fires, which would
+            // bounce the row back. Spring response is 0.32s; 0.35s
+            // covers settling without blocking the user from dragging
+            // onto a *different* card (each card has its own timestamp).
+            let now = Date()
+            if now.timeIntervalSince(lastTargetedAt) < 0.35 { return }
+            lastTargetedAt = now
+            store.moveWorkspace(id: draggingID, to: targetIdx)
+        }
+    }
+
+    /// Invisible drag preview — we only need the view's lifecycle hooks to
+    /// drive `draggingID`. The row reorders live under the cursor, so a
+    /// floating ghost above the cursor just adds visual noise.
+    private var dragPreview: some View {
+        Color.clear.frame(width: 1, height: 1)
     }
 
     private func startEditing() {
