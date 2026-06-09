@@ -1,0 +1,11 @@
+# GhosttyKit.xcframework prebuilt artifact registry.
+#
+# Each line: <ghostty-submodule-sha> <sha256-of-tar.gz> <release-tag>
+#
+# A new line is appended every time `scripts/publish-ghosttykit.sh` ships a
+# fresh xcframework to GitHub Releases. The current ghostty submodule SHA
+# MUST appear here, otherwise CI fails loudly — no silent zig fallback.
+#
+# Format is whitespace-separated; lines starting with '#' are comments.
+
+332b2aefc6e72d363aa93ab6ecfc86eeeeb5ed28 84c2d8ba37150f3bf9d2faadbb285e3e3d2a63d34060e3da99f35260ed69e746 xcframework-332b2ae-v1

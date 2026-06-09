@@ -33,3 +33,6 @@ dist/
 # Sparkle private signing key — NEVER commit
 sparkle_priv.key
 .sparkle/
+
+# Design exploration sandbox — local-only mockups, not part of the repo
+design/

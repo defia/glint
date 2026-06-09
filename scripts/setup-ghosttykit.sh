@@ -1,17 +1,38 @@
 #!/usr/bin/env bash
-# Build GhosttyKit.xcframework from the pinned ghostty submodule and install
-# it into Vendor/. This script is idempotent — it short-circuits when the
-# framework already exists and matches the current submodule SHA.
+# Install GhosttyKit.xcframework into Vendor/ by downloading the prebuilt
+# artifact that corresponds to the current ghostty submodule SHA.
 #
-# Requires: git, zig (>=0.13). On macOS: `brew install zig`.
+# Why download instead of `zig build`? Two reasons:
+#   1. ghostty pins minimum_zig_version to 0.15.2; that toolchain does not
+#      link cleanly against the macOS 26 (Tahoe) SDK shipped on current
+#      GitHub `macos-26` runners — libc symbols come up undefined.
+#   2. ghostty's own DockTilePlugin Swift target fails on the Xcode 16.4
+#      bundled with `macos-15` runners.
+# Building locally on developer machines hits the same toolchain matrix.
+# We side-step both problems by publishing a known-good xcframework from
+# someone's working machine and consuming it everywhere.
+#
+# Resolution flow:
+#   * Read the current ghostty submodule HEAD SHA.
+#   * Look it up in scripts/ghosttykit-checksums.txt → release tag + sha256.
+#   * Download the tar.gz from this repo's GitHub Releases, verify sha256,
+#     unpack into Vendor/.
+#   * Cache the build by writing Vendor/.ghosttykit-sha; subsequent runs
+#     short-circuit when the marker already matches the submodule SHA.
+#
+# To publish a new framework (after bumping the ghostty submodule), run
+# scripts/publish-ghosttykit.sh — it builds locally with Xcode + a zig you
+# install ad-hoc, uploads to releases, and appends a line to the registry.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GHOSTTY="$ROOT/ghostty"
 VENDOR="$ROOT/Vendor"
-TARGET="$VENDOR/GhosttyKit.xcframework"
+FRAMEWORK="$VENDOR/GhosttyKit.xcframework"
 MARKER="$VENDOR/.ghosttykit-sha"
+REGISTRY="$ROOT/scripts/ghosttykit-checksums.txt"
+REPO="${GHOSTTYKIT_RELEASE_REPO:-chenbstack/glint}"
 
 if [ ! -d "$GHOSTTY/.git" ] && [ ! -f "$GHOSTTY/.git" ]; then
   cat >&2 <<EOF
@@ -26,71 +47,66 @@ fi
 GHOSTTY_SHA="$(git -C "$GHOSTTY" rev-parse HEAD)"
 GHOSTTY_TAG="$(git -C "$GHOSTTY" describe --tags --exact-match 2>/dev/null || echo "$GHOSTTY_SHA")"
 
-# Fast path: framework present and built against the current submodule SHA.
-if [ -d "$TARGET" ] && [ -f "$TARGET/Info.plist" ] && [ -f "$MARKER" ]; then
+# Fast path: framework present and the marker matches the submodule.
+if [ -d "$FRAMEWORK" ] && [ -f "$FRAMEWORK/Info.plist" ] && [ -f "$MARKER" ]; then
   if [ "$(cat "$MARKER")" = "$GHOSTTY_SHA" ]; then
     echo "GhosttyKit.xcframework up to date (ghostty $GHOSTTY_TAG)."
     exit 0
   fi
-  echo "Vendor SHA mismatch — rebuilding for ghostty $GHOSTTY_TAG."
+  echo "Vendor SHA mismatch — re-downloading for ghostty $GHOSTTY_TAG."
 fi
 
-REQUIRED_ZIG="$(grep 'minimum_zig_version' "$GHOSTTY/build.zig.zon" | grep -oE '"[0-9]+\.[0-9]+\.[0-9]+"' | head -n1 | tr -d '"')"
-if [ -z "$REQUIRED_ZIG" ]; then REQUIRED_ZIG="0.15.2"; fi
+if [ ! -f "$REGISTRY" ]; then
+  echo "ERROR: $REGISTRY is missing — can't resolve a prebuilt." >&2
+  exit 1
+fi
 
-if ! command -v zig >/dev/null 2>&1; then
+# Look up the SHA → (sha256, tag). Strip comments and blank lines first.
+ENTRY="$(grep -v '^[[:space:]]*#' "$REGISTRY" | awk -v sha="$GHOSTTY_SHA" '$1 == sha {print; exit}')"
+if [ -z "$ENTRY" ]; then
   cat >&2 <<EOF
-ERROR: zig is not on PATH.
+ERROR: no prebuilt GhosttyKit listed for ghostty $GHOSTTY_SHA.
 
-GhosttyKit needs zig $REQUIRED_ZIG specifically (ghostty pins it in
-build.zig.zon). Homebrew's \`zig\` formula tracks the latest release and
-will be wrong — download $REQUIRED_ZIG from https://ziglang.org/download/
-and put it on PATH, or use a version manager:
-
-  mise use zig@$REQUIRED_ZIG
-  asdf install zig $REQUIRED_ZIG && asdf local zig $REQUIRED_ZIG
+Either:
+  * roll the submodule back to a SHA listed in scripts/ghosttykit-checksums.txt, or
+  * publish a fresh prebuilt with scripts/publish-ghosttykit.sh
+    (requires a machine that can actually build it — Xcode + zig 0.15.2).
 EOF
   exit 1
 fi
 
-CURRENT_ZIG="$(zig version)"
-if [ "$CURRENT_ZIG" != "$REQUIRED_ZIG" ]; then
+EXPECTED_SHA256="$(printf '%s' "$ENTRY" | awk '{print $2}')"
+TAG="$(printf '%s' "$ENTRY" | awk '{print $3}')"
+# Asset filename mirrors the release tag, e.g. xcframework-332b2ae-v1 → GhosttyKit-332b2ae-v1.tar.gz
+ASSET="GhosttyKit-${TAG#xcframework-}.tar.gz"
+URL="https://github.com/$REPO/releases/download/$TAG/$ASSET"
+TMPDIR="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR"' EXIT
+
+echo "Downloading GhosttyKit from $URL"
+if ! curl -fSL --retry 3 --retry-delay 2 -o "$TMPDIR/$ASSET" "$URL"; then
+  echo "ERROR: download failed." >&2
+  exit 1
+fi
+
+ACTUAL_SHA256="$(shasum -a 256 "$TMPDIR/$ASSET" | awk '{print $1}')"
+if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
   cat >&2 <<EOF
-WARNING: zig $CURRENT_ZIG is on PATH but ghostty wants $REQUIRED_ZIG.
-The build will likely fail. Install the exact version:
-  https://ziglang.org/download/
-Continuing anyway in case ghostty has loosened the requirement…
+ERROR: sha256 mismatch.
+  expected: $EXPECTED_SHA256
+  actual:   $ACTUAL_SHA256
 EOF
-fi
-
-# Default to a native (current-arch only) build because ghostty's universal
-# build cross-compiles x86_64 from arm64 runners and fails under recent
-# Xcode toolchains. Override by exporting GHOSTTYKIT_TARGET=universal once
-# Intel support is needed.
-TARGET="${GHOSTTYKIT_TARGET:-native}"
-echo "Building GhosttyKit from ghostty $GHOSTTY_TAG (target=$TARGET, 10-20 min on cold cache)…"
-(
-  cd "$GHOSTTY"
-  zig build \
-    -Demit-xcframework=true \
-    "-Dxcframework-target=$TARGET" \
-    -Doptimize=ReleaseFast
-)
-
-BUILT="$GHOSTTY/macos/GhosttyKit.xcframework"
-if [ ! -d "$BUILT" ]; then
-  # Older ghostty versions emit into zig-out/.
-  BUILT="$GHOSTTY/zig-out/GhosttyKit.xcframework"
-fi
-if [ ! -d "$BUILT" ]; then
-  echo "ERROR: zig build finished but GhosttyKit.xcframework was not produced." >&2
-  find "$GHOSTTY" -maxdepth 4 -name 'GhosttyKit.xcframework' -type d >&2 || true
   exit 1
 fi
 
 mkdir -p "$VENDOR"
-rm -rf "$TARGET"
-cp -R "$BUILT" "$TARGET"
-echo "$GHOSTTY_SHA" > "$MARKER"
+rm -rf "$FRAMEWORK"
+tar -xzf "$TMPDIR/$ASSET" -C "$VENDOR"
 
-echo "Installed GhosttyKit.xcframework (ghostty $GHOSTTY_TAG) at $TARGET"
+if [ ! -d "$FRAMEWORK" ] || [ ! -f "$FRAMEWORK/Info.plist" ]; then
+  echo "ERROR: tarball didn't produce $FRAMEWORK." >&2
+  exit 1
+fi
+
+echo "$GHOSTTY_SHA" > "$MARKER"
+echo "Installed GhosttyKit.xcframework (ghostty $GHOSTTY_TAG, $TAG)."
