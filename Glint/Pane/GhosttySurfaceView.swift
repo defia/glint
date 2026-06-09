@@ -78,18 +78,66 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     override func makeBackingLayer() -> CALayer {
         let metalLayer = CAMetalLayer()
         metalLayer.pixelFormat = .bgra8Unorm
-        // framebufferOnly=false lets the macOS compositor sample the drawable
-        // for translucent / blurred window backgrounds. Matches standalone
-        // ghostty's SurfaceView and cmux.
-        metalLayer.framebufferOnly = false
-        metalLayer.isOpaque = false
+        // Pane background is a solid color (see applyGlintTheme); no
+        // translucency in the terminal area itself, only in the chrome.
+        // `framebufferOnly = true` keeps Metal's tile-memory optimizations
+        // and prevents the compositor from sampling the drawable mid-
+        // render (which manifests as tearing during fast scroll).
+        // `isOpaque = true` lets the compositor skip blending.
+        metalLayer.framebufferOnly = true
+        metalLayer.isOpaque = true
         return metalLayer
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard window != nil, surface == nil else { return }
+        // Observe the window moving between screens so ghostty's
+        // CVDisplayLink can re-lock to the new display's vsync; without
+        // this the link stays on whatever display it was created on and
+        // scroll/animation pacing falls out of sync with the actual
+        // screen the surface is being composited onto.
+        NotificationCenter.default.removeObserver(
+            self,
+            name: NSWindow.didChangeScreenNotification,
+            object: nil
+        )
+        if let win = window {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(windowDidChangeScreen(_:)),
+                name: NSWindow.didChangeScreenNotification,
+                object: win
+            )
+        }
+        guard window != nil, surface == nil else {
+            pushDisplayIDToGhostty()
+            return
+        }
         createSurface()
+        // Push the initial display id right after surface creation. The
+        // `didChangeScreen` notification only fires on subsequent moves,
+        // so without this CVDisplayLink would start on
+        // `createWithActiveCGDisplays()`'s default display, which may not
+        // be the one our window is on (multi-monitor setups, secondary
+        // ProMotion display, etc.).
+        pushDisplayIDToGhostty()
+    }
+
+    @objc private func windowDidChangeScreen(_ note: Notification) {
+        pushDisplayIDToGhostty()
+        // Backing scale can differ across screens (Retina vs non-Retina,
+        // mixed-DPI external monitors); re-push so ghostty re-rasterises
+        // glyphs at the right scale.
+        viewDidChangeBackingProperties()
+    }
+
+    private func pushDisplayIDToGhostty() {
+        guard let s = surface,
+              let screenNum = window?.screen?.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")
+              ] as? NSNumber
+        else { return }
+        ghostty_surface_set_display_id(s, screenNum.uint32Value)
     }
 
     private func createSurface() {
@@ -299,6 +347,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
            metalLayer.drawableSize != drawableSize {
             metalLayer.drawableSize = drawableSize
         }
+        // Mirror what standalone ghostty's viewDidChangeBackingProperties
+        // does: tell the renderer the per-axis content scale so glyph
+        // rasterisation matches the screen's DPI. Without this, scale set
+        // only at surface creation drifts on cross-display moves.
+        ghostty_surface_set_content_scale(s, scale, scale)
         ghostty_surface_set_size(s, UInt32(pixelWidth), UInt32(pixelHeight))
         CATransaction.commit()
     }
