@@ -160,8 +160,14 @@ jobs:
           echo "sig_line=$SIG_LINE" >> "$GITHUB_OUTPUT"
           rm -f "$RUNNER_TEMP/sparkle.key"
 
+      # Appcast is only consumed by Sparkle in-app updates. Skip the
+      # update + commit when no Sparkle key is configured — there is no
+      # consumer for it and trying to `pip install defusedxml` blows up
+      # on PEP-668-managed Pythons (macos runner default).
       - name: Update appcast.xml
+        if: ${{ env.HAS_SPARKLE_KEY == 'true' }}
         env:
+          HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_ED_PRIV_KEY != '' }}
           VERSION: ${{ steps.version.outputs.version }}
           DMG_PATH: ${{ env.DMG }}
           TAG: ${{ github.ref_name }}
@@ -171,15 +177,20 @@ jobs:
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        env:
+          HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_ED_PRIV_KEY != '' }}
         with:
+          # appcast.xml is conditional — empty line is ignored by softprops.
           files: |
             ${{ env.DMG }}
-            appcast.xml
+            ${{ env.HAS_SPARKLE_KEY == 'true' && 'appcast.xml' || '' }}
           generate_release_notes: true
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false
 
       - name: Commit updated appcast on main
+        if: ${{ env.HAS_SPARKLE_KEY == 'true' }}
         env:
+          HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_ED_PRIV_KEY != '' }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
