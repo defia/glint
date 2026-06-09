@@ -237,9 +237,39 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     // MARK: - resize
 
+    /// Snap our frame to the screen pixel grid, same trick the container does.
+    /// AutoLayout drives our frame independently from `NoDragContainerView`'s
+    /// snap path — when SwiftUI / split layout hands AppKit a fractional width
+    /// (or origin), AppKit calls our setFrameSize / setFrameOrigin directly,
+    /// bypassing the container override. The IOSurfaceLayer that ghostty
+    /// installs as `view.layer` uses `kCAGravityTopLeft`; if the view sits at
+    /// a half-pixel position the compositor linearly resamples the surface
+    /// onto the pixel grid and we get a 1px row fault line tearing through
+    /// rapidly scrolling output — the same symptom the container snap was
+    /// meant to fix, just on a different code path.
     override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(newSize)
-        syncSurfaceSize(pointsSize: newSize)
+        super.setFrameSize(snappedSize(newSize))
+        syncSurfaceSize(pointsSize: bounds.size)
+    }
+
+    override func setFrameOrigin(_ newOrigin: NSPoint) {
+        super.setFrameOrigin(snappedOrigin(newOrigin))
+    }
+
+    private func snappedOrigin(_ p: NSPoint) -> NSPoint {
+        guard window != nil else { return p }
+        return backingAlignedRect(
+            NSRect(origin: p, size: frame.size),
+            options: [.alignAllEdgesNearest]
+        ).origin
+    }
+
+    private func snappedSize(_ s: NSSize) -> NSSize {
+        guard window != nil else { return s }
+        return backingAlignedRect(
+            NSRect(origin: frame.origin, size: s),
+            options: [.alignAllEdgesNearest]
+        ).size
     }
 
     override func viewDidChangeBackingProperties() {
