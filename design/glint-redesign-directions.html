@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Glint · Redesign Directions</title>
+  <style>
+    :root {
+      --page: #020306;
+      --text: #eff0f6;
+      --muted: #898da2;
+      --dim: #52576c;
+      --line: rgba(255,255,255,0.07);
+      --soft-line: rgba(255,255,255,0.035);
+      --indigo: #7c82e0;
+      --periwinkle: #a4a8f5;
+      --pink: #ff6482;
+      --cyan: #64d2ff;
+      --green: #30d158;
+      --amber: #ffb454;
+      --ui: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif;
+      --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: var(--ui);
+      color: var(--text);
+      background:
+        radial-gradient(900px 620px at 18% -10%, rgba(124,130,224,0.12), transparent 64%),
+        radial-gradient(900px 620px at 88% 8%, rgba(255,100,130,0.075), transparent 62%),
+        #000;
+      display: grid;
+      grid-template-rows: 66px 1fr;
+      letter-spacing: 0;
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.018;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    .switcher {
+      position: relative;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding-top: 18px;
+    }
+    .switcher button {
+      height: 32px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 0 12px;
+      color: #aeb1c4;
+      background: rgba(255,255,255,0.035);
+      font: 600 12px var(--ui);
+      cursor: pointer;
+    }
+    .switcher button.active {
+      color: white;
+      background: linear-gradient(180deg, rgba(124,130,224,0.22), rgba(124,130,224,0.10));
+      border-color: rgba(164,168,245,0.28);
+      box-shadow: 0 0 22px rgba(124,130,224,0.14);
+    }
+
+    .deck {
+      position: relative;
+      z-index: 1;
+      width: min(1840px, calc(100vw - 96px));
+      height: min(1040px, calc(100vh - 96px));
+      justify-self: center;
+      align-self: start;
+    }
+    .direction {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transform: translateY(10px) scale(0.992);
+      pointer-events: none;
+      transition: opacity 220ms ease, transform 220ms ease;
+    }
+    .direction.active {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    .window {
+      width: 100%;
+      height: 100%;
+      min-height: 700px;
+      overflow: hidden;
+      border-radius: 22px;
+      border: 1px solid rgba(190,194,220,0.18);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.09),
+        0 48px 120px rgba(0,0,0,0.72),
+        0 18px 46px rgba(0,0,0,0.56);
+    }
+
+    .traffic {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .traffic i {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.28);
+    }
+    .traffic i:nth-child(1) { background: linear-gradient(#ff7772, #ff4f58); }
+    .traffic i:nth-child(2) { background: linear-gradient(#ffd05d, #ffb51f); }
+    .traffic i:nth-child(3) { background: linear-gradient(#48df70, #28c84a); }
+
+    .logo {
+      width: 24px;
+      height: 24px;
+      filter: drop-shadow(0 0 12px rgba(255,100,130,0.34));
+    }
+    .icon {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      color: #aeb1c4;
+    }
+    .mono { font-family: var(--mono); }
+    .green { color: var(--green); }
+    .cyan { color: var(--cyan); }
+    .amber { color: var(--amber); }
+    .pink { color: #f0a4d0; }
+
+    /* Direction 1: Mercury Rail */
+    .mercury .window {
+      display: grid;
+      grid-template-columns: 74px 270px 1fr;
+      background: #070810;
+    }
+    .mercury .rail {
+      display: grid;
+      grid-template-rows: 50px 1fr 54px;
+      padding: 0 14px;
+      background:
+        linear-gradient(180deg, rgba(19,20,31,0.95), rgba(9,10,17,0.98)),
+        radial-gradient(240px 340px at 50% 10%, rgba(124,130,224,0.16), transparent 70%);
+      border-right: 1px solid var(--line);
+    }
+    .mercury .rail .traffic {
+      transform: scale(0.82);
+      transform-origin: left center;
+    }
+    .mercury .rail-icons {
+      display: grid;
+      align-content: start;
+      justify-items: center;
+      gap: 10px;
+      padding-top: 14px;
+    }
+    .mercury .rail-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      color: #898da2;
+      background: rgba(255,255,255,0.025);
+      border: 1px solid transparent;
+      font: 700 13px var(--mono);
+    }
+    .mercury .rail-icon.active {
+      color: white;
+      background: rgba(124,130,224,0.13);
+      border-color: rgba(164,168,245,0.22);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 0 18px rgba(124,130,224,0.22);
+    }
+    .mercury .sidebar {
+      display: grid;
+      grid-template-rows: 50px 1fr 60px;
+      background: linear-gradient(180deg, rgba(15,16,25,0.96), rgba(8,9,15,0.985));
+      border-right: 1px solid var(--soft-line);
+    }
+    .mercury .side-head {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 15px;
+      border-bottom: 1px solid var(--soft-line);
+    }
+    .mercury .side-head strong { font-size: 13px; font-weight: 650; }
+    .mercury .side-body { padding: 14px 10px; }
+    .mercury .search {
+      height: 30px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      color: var(--dim);
+      background: rgba(255,255,255,0.035);
+      font-size: 12px;
+      margin-bottom: 18px;
+    }
+    .mercury .label {
+      display: flex;
+      color: var(--dim);
+      font: 700 10px var(--ui);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin: 0 4px 8px;
+    }
+    .mercury .label span:last-child { margin-left: auto; font-family: var(--mono); letter-spacing: 0; font-weight: 500; }
+    .mercury .workspace {
+      position: relative;
+      height: 46px;
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      align-items: center;
+      gap: 9px;
+      padding: 0 8px;
+      border-radius: 8px;
+      color: #bbbcca;
+    }
+    .mercury .workspace.active {
+      background: rgba(124,130,224,0.08);
+      box-shadow: inset 0 0 0 1px rgba(124,130,224,0.11);
+    }
+    .mercury .workspace.active::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 10px;
+      bottom: 10px;
+      width: 2px;
+      border-radius: 2px;
+      background: var(--periwinkle);
+      box-shadow: 0 0 14px rgba(164,168,245,0.55);
+    }
+    .mercury .dotbox {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,0.06);
+      color: #c6c8d8;
+      font: 700 10px var(--mono);
+    }
+    .mercury .workspace.active .dotbox {
+      background: linear-gradient(135deg, #6366f1, #9b8cff);
+      color: white;
+    }
+    .mercury .ws-title { font-size: 12.5px; font-weight: 650; }
+    .mercury .ws-sub { margin-top: 2px; color: var(--dim); font: 500 10.5px var(--mono); }
+    .mercury .new {
+      margin: 0 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--dim);
+      border-top: 1px solid var(--soft-line);
+      padding-top: 12px;
+      font-size: 12px;
+    }
+    .mercury .main {
+      display: grid;
+      grid-template-rows: 50px 1fr 26px;
+      background:
+        radial-gradient(860px 360px at 45% 0%, rgba(124,130,224,0.05), transparent 60%),
+        #070710;
+    }
+    .mercury .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--soft-line);
+      background: rgba(13,14,22,0.86);
+    }
+    .mercury .context {
+      justify-self: center;
+      display: flex;
+      gap: 9px;
+      color: var(--muted);
+      font: 500 11.5px var(--mono);
+    }
+    .mercury .top-right {
+      justify-self: end;
+      display: flex;
+      gap: 4px;
+    }
+    .mercury .terminal {
+      padding: 28px;
+      color: #dfe0ea;
+      font: 14px/1.55 var(--mono);
+    }
+    .mercury .block {
+      max-width: 980px;
+      padding: 16px 0 16px 18px;
+      border-top: 1px solid transparent;
+      border-image: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent) 1;
+      position: relative;
+    }
+    .mercury .block.active::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 18px;
+      bottom: 18px;
+      width: 2px;
+      background: var(--periwinkle);
+      box-shadow: 0 0 18px rgba(164,168,245,0.55);
+    }
+    .prompt { display: flex; align-items: baseline; gap: 8px; }
+    .path { color: #e9e9f2; font-weight: 700; font-family: var(--ui); }
+    .home { color: var(--dim); }
+    .arrow { color: var(--periwinkle); text-shadow: 0 0 12px rgba(164,168,245,0.45); }
+    .output { margin-top: 5px; color: #aeb1c4; }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 18px;
+      border-top: 1px solid var(--soft-line);
+      background: rgba(4,5,10,0.85);
+      color: var(--dim);
+      font: 500 11px var(--mono);
+    }
+    .status .right { margin-left: auto; display: flex; gap: 14px; }
+
+    /* Direction 2: Prism Glass */
+    .prism .window {
+      display: grid;
+      grid-template-rows: 56px 1fr 28px;
+      background:
+        radial-gradient(740px 420px at 18% 8%, rgba(255,100,130,0.12), transparent 62%),
+        radial-gradient(760px 420px at 72% 0%, rgba(100,210,255,0.07), transparent 62%),
+        #080812;
+      position: relative;
+    }
+    .prism .window::before {
+      content: "";
+      position: absolute;
+      inset: 56px 0 28px;
+      pointer-events: none;
+      background:
+        linear-gradient(120deg, transparent 0 36%, rgba(164,168,245,0.055) 36.2%, transparent 48%),
+        linear-gradient(180deg, rgba(255,255,255,0.018), transparent 18%);
+    }
+    .prism .topbar {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 18px;
+      padding: 0 18px;
+      background: rgba(17,17,27,0.78);
+      border-bottom: 1px solid rgba(255,255,255,0.075);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
+    }
+    .prism .brandline {
+      justify-self: center;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13.5px;
+      font-weight: 650;
+    }
+    .prism .meta {
+      display: flex;
+      gap: 10px;
+      color: var(--muted);
+      font: 500 11px var(--mono);
+    }
+    .prism .body {
+      position: relative;
+      z-index: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 282px 1fr 246px;
+      gap: 14px;
+      padding: 14px;
+    }
+    .glass-panel {
+      border: 1px solid rgba(255,255,255,0.075);
+      background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.022));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.065);
+      backdrop-filter: blur(18px);
+      border-radius: 8px;
+    }
+    .prism .left {
+      padding: 14px 12px;
+    }
+    .prism .search {
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(255,255,255,0.045);
+      color: var(--dim);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      font-size: 12px;
+      margin-bottom: 18px;
+    }
+    .prism .workspace {
+      height: 58px;
+      display: grid;
+      grid-template-columns: 30px 1fr;
+      align-items: center;
+      gap: 10px;
+      padding: 0 9px;
+      border-radius: 8px;
+      color: #c9cad8;
+    }
+    .prism .workspace.active {
+      background: linear-gradient(90deg, rgba(255,100,130,0.10), rgba(124,130,224,0.08));
+      border: 1px solid rgba(255,255,255,0.07);
+    }
+    .prism .sparkbox {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #6b68ff, #ff6482);
+      box-shadow: 0 0 20px rgba(255,100,130,0.18), inset 0 1px 0 rgba(255,255,255,0.35);
+    }
+    .prism .workspace:not(.active) .sparkbox {
+      background: rgba(255,255,255,0.08);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+    }
+    .prism .term-panel {
+      padding: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: 34px 1fr;
+    }
+    .prism .tabline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.055);
+      color: var(--muted);
+      font: 500 11px var(--mono);
+    }
+    .prism .terminal {
+      padding: 22px 24px;
+      font: 14px/1.56 var(--mono);
+      color: #e0e1eb;
+    }
+    .prism .callout {
+      padding: 14px;
+      color: #bcbfd0;
+      font-size: 12px;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+    }
+    .prism .metric {
+      display: grid;
+      gap: 6px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.055);
+    }
+    .prism .metric b { font-size: 20px; font-weight: 650; color: white; }
+    .prism .status { position: relative; z-index: 1; }
+
+    /* Direction 3: Agent Flow */
+    .agent .window {
+      display: grid;
+      grid-template-columns: 286px 1fr 316px;
+      background: #07080e;
+    }
+    .agent .sidebar {
+      display: grid;
+      grid-template-rows: 52px auto 74px;
+      border-right: 1px solid var(--line);
+      background:
+        radial-gradient(360px 360px at 0% 0%, rgba(48,209,88,0.065), transparent 72%),
+        linear-gradient(180deg, rgba(16,18,25,0.98), rgba(7,8,13,0.99));
+    }
+    .agent .side-top {
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      gap: 14px;
+      border-bottom: 1px solid var(--soft-line);
+    }
+    .agent .side-body { padding: 16px 12px; }
+    .agent .search {
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.035);
+      color: var(--dim);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      font-size: 12px;
+      margin-bottom: 18px;
+    }
+    .agent .workspace {
+      min-height: 58px;
+      border-radius: 8px;
+      padding: 9px 9px 9px 11px;
+      display: grid;
+      grid-template-columns: 30px 1fr;
+      gap: 10px;
+      align-items: center;
+      color: #cdd0de;
+    }
+    .agent .workspace.active {
+      background: rgba(48,209,88,0.06);
+      box-shadow: inset 0 0 0 1px rgba(48,209,88,0.12);
+    }
+    .agent .workspace.active::before {
+      content: "";
+      position: absolute;
+    }
+    .agent .node {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.07);
+      display: grid;
+      place-items: center;
+      color: #a9adbf;
+      font: 700 11px var(--mono);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.055);
+    }
+    .agent .workspace.active .node {
+      background: linear-gradient(135deg, #30d158, #64d2ff);
+      color: #06100b;
+      box-shadow: 0 0 22px rgba(48,209,88,0.18);
+    }
+    .agent .new {
+      margin: 0 12px 14px;
+      border-top: 1px solid var(--soft-line);
+      padding-top: 14px;
+      color: var(--dim);
+      font-size: 12px;
+    }
+    .agent .center {
+      display: grid;
+      grid-template-rows: 52px 1fr 26px;
+      background:
+        radial-gradient(800px 380px at 50% -12%, rgba(100,210,255,0.055), transparent 62%),
+        #070710;
+    }
+    .agent .topbar {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--soft-line);
+      background: rgba(13,14,21,0.9);
+    }
+    .agent .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-weight: 650;
+      font-size: 13.5px;
+    }
+    .agent .task {
+      justify-self: center;
+      color: var(--muted);
+      font: 500 11.5px var(--mono);
+    }
+    .agent .terminal {
+      padding: 24px 26px;
+      font: 14px/1.56 var(--mono);
+      color: #dfe1ec;
+    }
+    .agent .step {
+      max-width: 980px;
+      position: relative;
+      padding: 15px 0 15px 22px;
+      border-top: 1px solid transparent;
+      border-image: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent) 1;
+    }
+    .agent .step::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 21px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 13px rgba(48,209,88,0.55);
+    }
+    .agent .right {
+      display: grid;
+      grid-template-rows: 52px 1fr;
+      border-left: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(15,17,24,0.98), rgba(7,8,13,0.99));
+    }
+    .agent .right-head {
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      color: #d9dae5;
+      font-size: 13px;
+      font-weight: 650;
+      border-bottom: 1px solid var(--soft-line);
+    }
+    .agent .activity {
+      padding: 16px;
+      display: grid;
+      align-content: start;
+      gap: 14px;
+    }
+    .agent .activity-row {
+      display: grid;
+      grid-template-columns: 20px 1fr;
+      gap: 10px;
+      color: #b9bccb;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .agent .activity-row i {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      font-style: normal;
+      color: #06100b;
+      background: var(--green);
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .agent .activity-row small {
+      display: block;
+      margin-top: 2px;
+      color: var(--dim);
+      font: 500 10.5px var(--mono);
+    }
+
+    @media (max-width: 1180px) {
+      .deck { width: calc(100vw - 32px); height: calc(100vh - 98px); }
+      .mercury .window { grid-template-columns: 64px 232px 1fr; }
+      .prism .body { grid-template-columns: 230px 1fr; }
+      .prism .callout { display: none; }
+      .agent .window { grid-template-columns: 246px 1fr; }
+      .agent .right { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="switcher" aria-label="Design direction switcher">
+    <button class="active" data-target="mercury">Mercury Rail</button>
+    <button data-target="prism">Prism Glass</button>
+    <button data-target="agent">Agent Flow</button>
+  </nav>
+
+  <main class="deck">
+    <section class="direction mercury active" data-panel="mercury">
+      <div class="window">
+        <aside class="rail">
+          <div class="traffic"><i></i><i></i><i></i></div>
+          <div class="rail-icons">
+            <img class="logo" src="./glint-logo.png" alt="">
+            <div class="rail-icon active">⌘</div>
+            <div class="rail-icon">›</div>
+            <div class="rail-icon">↯</div>
+          </div>
+          <div></div>
+        </aside>
+        <aside class="sidebar">
+          <div class="side-head">
+            <strong>Glint</strong>
+            <span class="mono" style="margin-left:auto;color:var(--dim);font-size:11px;">⌘K</span>
+          </div>
+          <div class="side-body">
+            <div class="search">⌕ 搜索工作区</div>
+            <div class="label"><span>Workspaces</span><span>2</span></div>
+            <div class="workspace active">
+              <div class="dotbox">›_</div>
+              <div><div class="ws-title">~/work/private</div><div class="ws-sub">main · clean</div></div>
+            </div>
+            <div class="workspace">
+              <div class="dotbox">›_</div>
+              <div><div class="ws-title">~/work</div><div class="ws-sub">1 pane · idle</div></div>
+            </div>
+          </div>
+          <div class="new">＋ 新建工作区</div>
+        </aside>
+        <section class="main">
+          <header class="topbar">
+            <div class="icon">☰</div>
+            <div class="context"><span>private</span><span>·</span><span>main</span><span>·</span><span class="green">● clean</span></div>
+            <div class="top-right"><div class="icon">⌘</div><div class="icon">⚙</div></div>
+          </header>
+          <div class="terminal">
+            <div class="block">
+              <div class="prompt"><span class="path"><span class="home">~</span>/work/private</span><span class="arrow">❯</span><span>git status</span></div>
+              <div class="output"><span class="green">✓</span> branch main is clean<br>nothing to commit, working tree clean</div>
+            </div>
+            <div class="block active">
+              <div class="prompt"><span class="path"><span class="home">~</span>/work/private</span><span class="arrow">❯</span><span>cargo run --release</span></div>
+              <div class="output">Compiling <span class="pink">glint</span> v0.1.0<br>Finished <span class="green">release</span> profile in <span class="amber">1.84s</span><br><span class="cyan">Running</span> target/release/Glint</div>
+            </div>
+          </div>
+          <footer class="status"><span class="green">● connected</span><span>main</span><span>clean</span><span class="right"><span>UTF-8</span><span>zsh 5.9</span><span>⌘D split</span></span></footer>
+        </section>
+      </div>
+    </section>
+
+    <section class="direction prism" data-panel="prism">
+      <div class="window">
+        <header class="topbar">
+          <div class="traffic"><i></i><i></i><i></i></div>
+          <div class="brandline"><img class="logo" src="./glint-logo.png" alt=""><span>Glint</span></div>
+          <div class="meta"><span>private</span><span>main</span><span class="green">●</span></div>
+        </header>
+        <div class="body">
+          <aside class="left glass-panel">
+            <div class="search">⌕ Search</div>
+            <div class="workspace active">
+              <div class="sparkbox"></div>
+              <div><div class="ws-title">~/work/private</div><div class="ws-sub">1 pane · active</div></div>
+            </div>
+            <div class="workspace">
+              <div class="sparkbox"></div>
+              <div><div class="ws-title">~/work</div><div class="ws-sub">idle · clean</div></div>
+            </div>
+          </aside>
+          <section class="term-panel glass-panel">
+            <div class="tabline"><span class="green">●</span><span>glint · main</span><span style="margin-left:auto;">16:24</span></div>
+            <div class="terminal">
+              <div class="prompt"><span class="path"><span class="home">~</span>/work/private</span><span class="arrow">❯</span><span>glint doctor</span></div>
+              <div class="output"><span class="green">✓</span> GhosttyKit linked<br><span class="green">✓</span> Workspace persistence ready<br><span class="cyan">info</span> App icon assets detected</div>
+              <br>
+              <div class="prompt"><span class="path"><span class="home">~</span>/work/private</span><span class="arrow">❯</span><span style="color:#fff;">_</span></div>
+            </div>
+          </section>
+          <aside class="callout glass-panel">
+            <div class="metric"><span class="mono" style="color:var(--dim);">SESSION</span><b>00:08:42</b></div>
+            <div class="metric"><span class="mono" style="color:var(--dim);">PANE</span><b>1 active</b></div>
+            <div class="metric"><span class="mono" style="color:var(--dim);">STATUS</span><b class="green">clean</b></div>
+          </aside>
+        </div>
+        <footer class="status"><span class="green">● connected</span><span>GhosttyKit</span><span>main</span><span class="right"><span>UTF-8</span><span>zsh 5.9</span></span></footer>
+      </div>
+    </section>
+
+    <section class="direction agent" data-panel="agent">
+      <div class="window">
+        <aside class="sidebar">
+          <div class="side-top"><div class="traffic"><i></i><i></i><i></i></div></div>
+          <div class="side-body">
+            <div class="search">⌕ 搜索 agent / workspace</div>
+            <div class="label"><span>Workspaces</span><span>2</span></div>
+            <div class="workspace active">
+              <div class="node">AI</div>
+              <div><div class="ws-title">~/work/private</div><div class="ws-sub">agent ready · main</div></div>
+            </div>
+            <div class="workspace">
+              <div class="node">›</div>
+              <div><div class="ws-title">~/work</div><div class="ws-sub">manual shell · idle</div></div>
+            </div>
+          </div>
+          <div class="new">＋ 新建工作区</div>
+        </aside>
+        <section class="center">
+          <header class="topbar">
+            <div class="brand"><img class="logo" src="./glint-logo.png" alt=""><span>Glint</span></div>
+            <div class="task">agent session · private · clean</div>
+            <div class="icon">⚙</div>
+          </header>
+          <div class="terminal">
+            <div class="step">
+              <div class="prompt"><span class="path"><span class="home">~</span>/work/private</span><span class="arrow">❯</span><span>codex resume</span></div>
+              <div class="output">Restored thread context · <span class="green">ready</span></div>
+            </div>
+            <div class="step">
+              <div class="prompt"><span class="path"><span class="home">~</span>/work/private</span><span class="arrow">❯</span><span>cargo test</span></div>
+              <div class="output"><span class="green">✓</span> 42 passed · <span class="amber">0</span> failed · <span class="cyan">3.2s</span></div>
+            </div>
+            <div class="step">
+              <div class="prompt"><span class="path"><span class="home">~</span>/work/private</span><span class="arrow">❯</span><span>_</span></div>
+            </div>
+          </div>
+          <footer class="status"><span class="green">● connected</span><span>agent</span><span>main</span><span class="right"><span>UTF-8</span><span>⌘K command</span></span></footer>
+        </section>
+        <aside class="right">
+          <div class="right-head">Agent Activity</div>
+          <div class="activity">
+            <div class="activity-row"><i>✓</i><div>Read workspace state<small>2 files changed · no conflicts</small></div></div>
+            <div class="activity-row"><i>↯</i><div>Running verification<small>cargo test · release profile</small></div></div>
+            <div class="activity-row"><i>•</i><div>Waiting for next command<small>prompt is active</small></div></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const buttons = Array.from(document.querySelectorAll("[data-target]"));
+    const panels = Array.from(document.querySelectorAll("[data-panel]"));
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const target = button.dataset.target;
+        buttons.forEach((item) => item.classList.toggle("active", item === button));
+        panels.forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === target));
+      });
+    });
+  </script>
+</body>
+</html>
