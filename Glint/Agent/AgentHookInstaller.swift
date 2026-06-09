@@ -11,6 +11,7 @@ enum AgentHookInstaller {
     private static let hookEvents: [String] = [
         "SessionStart",
         "UserPromptSubmit",
+        "PreToolUse",
         "PostToolUse",
         "Notification",
         "PermissionRequest",

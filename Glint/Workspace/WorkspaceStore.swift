@@ -493,6 +493,7 @@ final class WorkspaceStore: ObservableObject {
         switch hook {
         case "SessionStart":      state.status = .idle
         case "UserPromptSubmit":  state.status = .thinking
+        case "PreToolUse":        state.status = .tool
         case "PostToolUse":       state.status = .thinking
         case "Notification":      break   // noisy: background/idle prompts, ignore
         case "PermissionRequest": state.status = .needsPermission
