@@ -6,18 +6,30 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
+      <title>Glint 0.1.1</title>
+      <sparkle:version>202606091337</sparkle:version>
+      <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
+      <pubDate>Tue, 09 Jun 2026 13:39:09 +0000</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.1</h3><ul>
+    <li><strong>pane: hover / selection / IME / theme / drag-drop / bell</strong><br><span style="color:#666">终端面板:补全 hover、选区、IME、主题、拖放、Bell 等系统功能</span></li>
+    <li>release: appcast for v0.1.0</li>
+  </ul></div>]]></description>
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.1/Glint-0.1.1.dmg" length="9064422" type="application/octet-stream" sparkle:edSignature="xlEtFG81MmE+YsRgOxddrSRUKD+3ok1J327oDpzR5QPuS4ZB501QE5kNOip+hqO//4Anyc4N8ci6ogPSSMrrDQ==" />
+    </item>
+    <item>
       <title>Glint 0.1.0</title>
       <sparkle:version>202606091325</sparkle:version>
       <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
       <pubDate>Tue, 09 Jun 2026 13:27:25 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.0</h3><ul>
-    <li><strong>pane: scrollback + render alignment + hook isolation</strong><br><span style="color:#666">终端面板:补滚动支持 / 修渲染断层 / dev 与 prod 独立 hook</span></li>
-    <li>chrome: rework keyboard shortcuts and sidebar search</li>
-    <li><strong>i18n: wire sidebar / palette / about through LocalizedStringKey</strong><br><span style="color:#666">让侧栏、命令面板、关于页面真正走中文(顺手把侧栏搜索接上、通道根据构建判断)</span></li>
-    <li><strong>readme: prefix upgrade with brew update</strong><br><span style="color:#666">升级命令前面加上 brew update,否则 tap 元数据不刷新拉不到新版</span></li>
-    <li>release: appcast for v0.0.4</li>
-  </ul></div>]]></description>
+      <description>&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.0&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;pane: scrollback + render alignment + hook isolation&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;终端面板:补滚动支持 / 修渲染断层 / dev 与 prod 独立 hook&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;chrome: rework keyboard shortcuts and sidebar search&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;i18n: wire sidebar / palette / about through LocalizedStringKey&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;让侧栏、命令面板、关于页面真正走中文(顺手把侧栏搜索接上、通道根据构建判断)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;readme: prefix upgrade with brew update&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;升级命令前面加上 brew update,否则 tap 元数据不刷新拉不到新版&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.0.4&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;</description>
       <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.0/Glint-0.1.0.dmg" length="10092499" type="application/octet-stream" sparkle:edSignature="OzT16e54/TZavUvjlPtdXAnvEdzcvobWwt2Rz+Y4VXOd1djvDIfGa8mg8m1zn3dIGsm+Z9BQUczELY56uCmPDA==" />
     </item>
     <item>
