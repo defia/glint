@@ -160,8 +160,19 @@ SEPARATOR_HTML = (
     "<hr style=\"border:none;border-top:1px solid #e5e5e5;margin:16px 0;\">"
 )
 
+# Cap how many prior versions we fold into the current item's notes. The
+# Sparkle dialog has no native multi-version delta view, so to keep
+# cross-version upgraders from missing intermediate notes we still fold
+# history into the latest item — but capping at the most recent N
+# prevents the dialog from growing unbounded (and reading like a wall
+# of ancient changelog) as releases accumulate. 9 history entries plus
+# the current version = 10 versions visible in the dialog.
+HISTORY_CAP = 9
+
 history_chunks = []
 for prev in channel.findall("item"):
+    if len(history_chunks) >= HISTORY_CAP:
+        break
     d = prev.find("description")
     if d is None or not d.text:
         continue
