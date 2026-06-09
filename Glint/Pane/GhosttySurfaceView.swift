@@ -329,20 +329,28 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     override func keyDown(with event: NSEvent) {
         guard let s = surface else { super.keyDown(with: event); return }
         let mods = event.modifierFlags
-        // ⌘V (keycode 9) with an image clipboard: forward ⌃V (byte
-        // 0x16) into the PTY instead of pasting a file-path string.
-        // The running CLI (claude code, codex) reads the system
-        // clipboard itself on ⌃V and attaches the image directly —
-        // no literal path leaks into the prompt buffer.
+        // ⌘V (keycode 9): handle explicitly. Embedded ghostty's default
+        // keybindings don't include cmd+v=paste_from_clipboard (standalone
+        // ghostty.app wires that through its own Edit menu, which we
+        // don't get when embedding), so without this branch the event
+        // falls through to `interpretKeyEvents` and macOS types a literal
+        // "v" via `insertText`.
+        //  - image clipboard → forward ⌃V (0x16); running CLIs (claude
+        //    code, codex) read the system clipboard themselves on ⌃V
+        //    and attach the image, no literal path leaks into the buffer.
+        //  - everything else → ghostty's normal paste path.
         if mods.contains(.command),
            !mods.contains(.shift), !mods.contains(.option), !mods.contains(.control),
-           event.keyCode == 9,
-           clipboardHasPasteableImage() {
-            var syn: UInt8 = 0x16
-            withUnsafePointer(to: &syn) { ptr in
-                ptr.withMemoryRebound(to: CChar.self, capacity: 1) { cptr in
-                    ghostty_surface_text_input(s, cptr, 1)
+           event.keyCode == 9 {
+            if clipboardHasPasteableImage() {
+                var syn: UInt8 = 0x16
+                withUnsafePointer(to: &syn) { ptr in
+                    ptr.withMemoryRebound(to: CChar.self, capacity: 1) { cptr in
+                        ghostty_surface_text_input(s, cptr, 1)
+                    }
                 }
+            } else {
+                pasteClipboardText(into: s)
             }
             return
         }
@@ -657,7 +665,23 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     @objc private func menuPaste(_ sender: Any?) {
         guard let s = surface else { return }
         if pasteImageFromClipboardIfPresent() { return }
-        triggerBindingAction(s, "paste_from_clipboard")
+        pasteClipboardText(into: s)
+    }
+
+    /// Read the system clipboard as a string and inject it via
+    /// `ghostty_surface_text` (the paste channel — wraps in bracketed
+    /// paste sequences when the running app supports it). We bypass
+    /// ghostty's `paste_from_clipboard` binding action because that path
+    /// goes through `read_clipboard_cb`, which Glint doesn't wire (it
+    /// requires tracking the request `state` pointer per surface and
+    /// completing asynchronously via `ghostty_surface_complete_clipboard_request`).
+    /// Driving paste from the AppKit side keeps the surface explicit.
+    private func pasteClipboardText(into s: ghostty_surface_t) {
+        guard let str = NSPasteboard.general.string(forType: .string),
+              !str.isEmpty else { return }
+        str.withCString { ptr in
+            ghostty_surface_text(s, ptr, UInt(strlen(ptr)))
+        }
     }
 
     /// True when the pasteboard holds image bytes worth re-routing through
@@ -747,6 +771,36 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         guard let s = surface else { return }
         triggerBindingAction(s, "clear_screen")
     }
+
+    // MARK: - standard Edit menu hooks
+    //
+    // SwiftUI's default Edit menu binds ⌘C / ⌘V / ⌘A to the standard
+    // `copy:` / `paste:` / `selectAll:` selectors. Implementing them keeps
+    // those menu items enabled.
+    //
+    // `paste:` deliberately does NOT call `menuPaste` — they have different
+    // semantics for image clipboards: ⌘V (this hook) forwards ⌃V so the
+    // running CLI (claude code, codex) attaches the image directly, while
+    // right-click → Paste (menuPaste) writes the image to ~/Library/Caches
+    // and pastes the shell-quoted path for use in shell commands. Same
+    // image/text split as the ⌘V branch in `keyDown`.
+
+    @objc func paste(_ sender: Any?) {
+        guard let s = surface else { return }
+        if clipboardHasPasteableImage() {
+            var syn: UInt8 = 0x16
+            withUnsafePointer(to: &syn) { ptr in
+                ptr.withMemoryRebound(to: CChar.self, capacity: 1) { cptr in
+                    ghostty_surface_text_input(s, cptr, 1)
+                }
+            }
+        } else {
+            pasteClipboardText(into: s)
+        }
+    }
+
+    @objc func copy(_ sender: Any?) { menuCopy(sender) }
+    @objc override func selectAll(_ sender: Any?) { menuSelectAll(sender) }
 
     /// Forward scroll wheel events to ghostty. Without this, `scrollWheel`
     /// bubbles up through SwiftUI and ghostty never sees it — scrollback
