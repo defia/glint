@@ -214,6 +214,9 @@ jobs:
             ${{ env.HAS_SPARKLE_KEY == 'true' && 'appcast.xml' || '' }}
           generate_release_notes: true
           fail_on_unmatched_files: false
+          # Beta tags (v0.2.0-beta.1, …) are GitHub prereleases: hidden from
+          # the "Latest" badge and from anyone grabbing the newest stable.
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
 
       - name: Commit updated appcast on main
         if: ${{ env.HAS_SPARKLE_KEY == 'true' }}
@@ -243,8 +246,11 @@ jobs:
       # TAP_GITHUB_TOKEN secret (PAT with push access to
       # chenbstack/homebrew-glint) is not configured — the default
       # GITHUB_TOKEN is scoped to this repo and cannot push to the tap.
+      # Betas never reach the cask — `brew install --cask glint` should
+      # always hand out the latest stable; beta distribution is Sparkle's
+      # channel mechanism (and the GitHub prerelease page) only.
       - name: Bump Homebrew tap cask
-        if: ${{ env.HAS_TAP_TOKEN == 'true' }}
+        if: ${{ env.HAS_TAP_TOKEN == 'true' && !contains(steps.version.outputs.version, '-') }}
         env:
           HAS_TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN != '' }}
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}

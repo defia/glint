@@ -439,6 +439,12 @@ private struct UpdatesCard: View {
                     .toggleStyle(.switch).labelsHidden()
             }
             SettingsDivider()
+            SettingsRow("Receive beta updates",
+                        subtitle: "Get pre-release builds early. Beta builds ship new work before it has fully settled.") {
+                Toggle("", isOn: $updater.receiveBetaUpdates)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
             SettingsRow("Check now",
                         subtitle: "Manually look for a new release right now.") {
                 Button("Check") {

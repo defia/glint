@@ -48,7 +48,16 @@ fi
 # in CDATA via a post-process step — Sparkle expects description HTML to
 # be CDATA-wrapped (or escaped) and the stdlib ElementTree can't emit
 # CDATA sections directly.
-PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo '')"
+# Stable releases diff against the previous *stable* tag so their notes
+# cover everything since the last release regular users actually got —
+# including commits that only ever shipped in betas. Beta releases diff
+# against whatever tag came before (stable or beta): beta users track
+# every increment.
+if [[ "$VERSION" == *-* ]]; then
+  PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo '')"
+else
+  PREV_TAG="$(git describe --tags --abbrev=0 --exclude='*-*' "${TAG}^" 2>/dev/null || echo '')"
+fi
 export VERSION BUILD_NUMBER DOWNLOAD_URL PUB_DATE LENGTH SIG_LINE REPO TAG PREV_TAG
 
 python3 - "$APPCAST" <<'PY'
@@ -169,10 +178,21 @@ SEPARATOR_HTML = (
 # the current version = 10 versions visible in the dialog.
 HISTORY_CAP = 9
 
+# Prerelease versions (0.2.0-beta.1, …) ship on the "beta" Sparkle channel:
+# their items carry <sparkle:channel>beta</sparkle:channel> and are invisible
+# to updaters that didn't opt in via SPUUpdaterDelegate.allowedChannels.
+is_beta = "-" in version
+
 history_chunks = []
 for prev in channel.findall("item"):
     if len(history_chunks) >= HISTORY_CAP:
         break
+    # Stable items keep beta releases out of their folded history — a
+    # stable user never installed those, and their commits are already
+    # covered by this item's own since-last-stable notes. Beta items fold
+    # everything: beta users hop release to release.
+    if not is_beta and prev.find(f"{{{SPARKLE}}}channel") is not None:
+        continue
     d = prev.find("description")
     if d is None or not d.text:
         continue
@@ -202,6 +222,8 @@ item = ET.Element("item")
 ET.SubElement(item, "title").text = f"Glint {version}"
 ET.SubElement(item, f"{{{SPARKLE}}}version").text = build_number
 ET.SubElement(item, f"{{{SPARKLE}}}shortVersionString").text = version
+if is_beta:
+    ET.SubElement(item, f"{{{SPARKLE}}}channel").text = "beta"
 ET.SubElement(item, "pubDate").text = pub_date
 ET.SubElement(item, f"{{{SPARKLE}}}minimumSystemVersion").text = "14.0"
 # Don't emit <sparkle:releaseNotesLink> — when both link and description
