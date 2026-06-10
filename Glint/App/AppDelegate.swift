@@ -54,11 +54,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let busy = WorkspaceStore.current?.panesNeedingQuitConfirmation ?? 0
         guard busy > 0 else { return true }
         return WorkspaceStore.confirmDestruction(
-            message: "Quit Glint?",
+            message: String(localized: "Quit Glint?"),
             informative: busy == 1
-                ? "1 pane still has something running; quitting will terminate it."
-                : "\(busy) panes still have something running; quitting will terminate all of them.",
-            confirmTitle: "Quit",
+                ? String(localized: "1 pane still has something running; quitting will terminate it.")
+                : String(format: String(localized: "%d panes still have something running; quitting will terminate all of them."), busy),
+            confirmTitle: String(localized: "Quit"),
             suppressionKey: "glint.suppressQuitConfirm"
         )
     }

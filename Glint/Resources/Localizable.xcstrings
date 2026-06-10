@@ -1,25 +1,33 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "· %@" : {
-
-    },
-    "%@" : {
-
-    },
-    "~/.glint/hooks/glint-report.sh" : {
-
-    },
-    "⌘N" : {
-
-    },
-    "✓ done" : {
-      "extractionState" : "stale",
+    "%@" : {},
+    "%d of its panes still have something running; everything in this workspace will be terminated." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "✓ 已完成"
+            "value" : "其中 %d 个面板仍有任务在运行,该工作区里的所有内容都会被终止。"
+          }
+        }
+      }
+    },
+    "%d panes still have something running; quitting will terminate all of them." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还有 %d 个面板有任务在运行,退出会全部终止。"
+          }
+        }
+      }
+    },
+    "1 pane still has something running; quitting will terminate it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还有 1 个面板有任务在运行,退出会将其终止。"
           }
         }
       }
@@ -30,6 +38,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "为 AI 代理打造的原生 Mac 终端。"
+          }
+        }
+      }
+    },
+    "ACTION" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "动作"
           }
         }
       }
@@ -52,17 +71,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "强调色"
-          }
-        }
-      }
-    },
-    "ACTION" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "动作"
           }
         }
       }
@@ -219,6 +227,16 @@
         }
       }
     },
+    "Cancel" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
     "Channel" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -296,6 +314,16 @@
         }
       }
     },
+    "Clear" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清屏"
+          }
+        }
+      }
+    },
     "Close (Esc)" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -336,6 +364,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭当前面板"
+          }
+        }
+      }
+    },
+    "Close this pane?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭这个面板?"
           }
         }
       }
@@ -417,13 +455,12 @@
         }
       }
     },
-    "compacting…" : {
-      "extractionState" : "stale",
+    "Copy" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "压缩中…"
+            "value" : "拷贝"
           }
         }
       }
@@ -483,6 +520,16 @@
         }
       }
     },
+    "Delete “%@”?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除“%@”?"
+          }
+        }
+      }
+    },
     "Density" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -527,19 +574,15 @@
         }
       }
     },
-    "Enable glass effect" : {
-      "extractionState" : "stale",
+    "Don't ask again" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开启毛玻璃"
+            "value" : "不再询问"
           }
         }
       }
-    },
-    "English" : {
-
     },
     "ESC" : {
       "localizations" : {
@@ -551,6 +594,18 @@
         }
       }
     },
+    "Enable glass effect" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启毛玻璃"
+          }
+        }
+      }
+    },
+    "English" : {},
     "Events" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -923,17 +978,6 @@
         }
       }
     },
-    "needs approval" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "等待批准"
-          }
-        }
-      }
-    },
     "New Workspace" : {
       "localizations" : {
         "zh-Hans" : {
@@ -951,17 +995,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下一工作区"
-          }
-        }
-      }
-    },
-    "no cwd" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无目录"
           }
         }
       }
@@ -1010,28 +1043,6 @@
         }
       }
     },
-    "pane" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "面板"
-          }
-        }
-      }
-    },
-    "panes" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "面板"
-          }
-        }
-      }
-    },
     "Panes" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1039,6 +1050,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "面板"
+          }
+        }
+      }
+    },
+    "Paste" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴"
+          }
+        }
+      }
+    },
+    "Paste potentially unsafe text?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴可能不安全的文本?"
           }
         }
       }
@@ -1087,6 +1118,16 @@
         }
       }
     },
+    "Quit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出"
+          }
+        }
+      }
+    },
     "Quit Glint" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1094,6 +1135,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "退出 Glint"
+          }
+        }
+      }
+    },
+    "Quit Glint?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出 Glint?"
           }
         }
       }
@@ -1142,6 +1193,16 @@
         }
       }
     },
+    "Retry" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重试"
+          }
+        }
+      }
+    },
     "Roomy" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1160,17 +1221,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "执行选中项"
-          }
-        }
-      }
-    },
-    "running tool" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "调用工具"
           }
         }
       }
@@ -1204,6 +1254,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索"
+          }
+        }
+      }
+    },
+    "Select All" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全选"
           }
         }
       }
@@ -1262,17 +1322,6 @@
         }
       }
     },
-    "Show or hide the workspace sidebar" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示或隐藏工作区侧栏"
-          }
-        }
-      }
-    },
     "Show Sidebar" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1280,6 +1329,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示侧栏"
+          }
+        }
+      }
+    },
+    "Show or hide the workspace sidebar" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示或隐藏工作区侧栏"
           }
         }
       }
@@ -1324,6 +1384,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "字号"
+          }
+        }
+      }
+    },
+    "Something is still running in it and will be terminated." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其中仍有任务在运行,关闭后会被终止。"
           }
         }
       }
@@ -1493,6 +1563,26 @@
         }
       }
     },
+    "Terminal failed to start" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端启动失败"
+          }
+        }
+      }
+    },
+    "The text contains newlines or control characters, which may execute commands immediately." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文本包含换行或控制字符,粘贴后可能立即执行命令。"
+          }
+        }
+      }
+    },
     "Theme" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1511,17 +1601,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主题、强调色、毛玻璃"
-          }
-        }
-      }
-    },
-    "thinking…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "思考中…"
           }
         }
       }
@@ -1646,6 +1725,27 @@
         }
       }
     },
+    "WORKSPACE" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区"
+          }
+        }
+      }
+    },
+    "WORKSPACES" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区"
+          }
+        }
+      }
+    },
     "Window" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1668,17 +1768,6 @@
         }
       }
     },
-    "WORKSPACE" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "工作区"
-          }
-        }
-      }
-    },
     "Workspaces" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1690,19 +1779,108 @@
         }
       }
     },
-    "WORKSPACES" : {
+    "compacting…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "工作区"
+            "value" : "压缩中…"
           }
         }
       }
     },
-    "中文（简体）" : {
-
-    }
+    "done" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成"
+          }
+        }
+      }
+    },
+    "needs approval" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待批准"
+          }
+        }
+      }
+    },
+    "no cwd" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无目录"
+          }
+        }
+      }
+    },
+    "pane" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "面板"
+          }
+        }
+      }
+    },
+    "panes" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "面板"
+          }
+        }
+      }
+    },
+    "running tool" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调用工具"
+          }
+        }
+      }
+    },
+    "thinking…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "思考中…"
+          }
+        }
+      }
+    },
+    "~/.glint/hooks/glint-report.sh" : {},
+    "· %@" : {},
+    "⌘N" : {},
+    "✓ done" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "✓ 已完成"
+          }
+        }
+      }
+    },
+    "中文（简体）" : {}
   },
   "version" : "1.0"
 }

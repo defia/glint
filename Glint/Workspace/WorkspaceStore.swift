@@ -820,9 +820,9 @@ final class WorkspaceStore: ObservableObject {
         alert.informativeText = informative
         alert.alertStyle = .warning
         alert.addButton(withTitle: confirmTitle)
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: "Cancel"))
         alert.showsSuppressionButton = true
-        alert.suppressionButton?.title = "Don't ask again"
+        alert.suppressionButton?.title = String(localized: "Don't ask again")
         guard alert.runModal() == .alertFirstButtonReturn else { return false }
         if alert.suppressionButton?.state == .on {
             defaults.set(true, forKey: suppressionKey)
@@ -843,9 +843,9 @@ final class WorkspaceStore: ObservableObject {
         let key = WorkspacePaneKey(workspace: workspaces[i].id, pane: target)
         if paneNeedsCloseConfirmation(key),
            !Self.confirmDestruction(
-               message: "Close this pane?",
-               informative: "Something is still running in it and will be terminated.",
-               confirmTitle: "Close Pane",
+               message: String(localized: "Close this pane?"),
+               informative: String(localized: "Something is still running in it and will be terminated."),
+               confirmTitle: String(localized: "Close Pane"),
                suppressionKey: "glint.suppressClosePaneConfirm"
            ) {
             return
@@ -933,9 +933,9 @@ final class WorkspaceStore: ObservableObject {
             .filter { paneNeedsCloseConfirmation(WorkspacePaneKey(workspace: id, pane: $0)) }
         if !busyPanes.isEmpty,
            !Self.confirmDestruction(
-               message: "Delete “\(workspaces[idx].displayName)”?",
-               informative: "\(busyPanes.count) of its panes still have something running; everything in this workspace will be terminated.",
-               confirmTitle: "Delete Workspace",
+               message: String(format: String(localized: "Delete “%@”?"), workspaces[idx].displayName),
+               informative: String(format: String(localized: "%d of its panes still have something running; everything in this workspace will be terminated."), busyPanes.count),
+               confirmTitle: String(localized: "Delete Workspace"),
                suppressionKey: "glint.suppressDeleteWorkspaceConfirm"
            ) {
             return
