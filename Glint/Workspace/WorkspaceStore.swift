@@ -113,9 +113,36 @@ struct Workspace: Identifiable, Codable {
 // MARK: - Persisted store snapshot
 
 struct PersistedState: Codable {
+    /// On-disk schema version. Bump only for shape changes that tolerant
+    /// decoding can't paper over; plain additions should use
+    /// `decodeIfPresent` + a default instead, so old files keep loading.
+    static let currentVersion = 1
+
+    var version: Int
     var workspaces: [Workspace]
     var selectedWorkspaceID: UUID?
     var sidebarCollapsed: Bool
+
+    init(workspaces: [Workspace], selectedWorkspaceID: UUID?, sidebarCollapsed: Bool) {
+        self.version = Self.currentVersion
+        self.workspaces = workspaces
+        self.selectedWorkspaceID = selectedWorkspaceID
+        self.sidebarCollapsed = sidebarCollapsed
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version, workspaces, selectedWorkspaceID, sidebarCollapsed
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // Files written before versioning have no `version` key — they are
+        // retroactively v1.
+        self.version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        self.workspaces = try c.decode([Workspace].self, forKey: .workspaces)
+        self.selectedWorkspaceID = try c.decodeIfPresent(UUID.self, forKey: .selectedWorkspaceID)
+        self.sidebarCollapsed = try c.decodeIfPresent(Bool.self, forKey: .sidebarCollapsed) ?? false
+    }
 
     static var fresh: PersistedState {
         let personal = Workspace.fresh(name: "Personal", accentHex: "5E5CE6", symbol: "P")
@@ -325,10 +352,10 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(sortCompletedFirst, forKey: "glint.sortCompletedFirst") }
     }
 
-    /// Install both agents' hooks on the very first launch so status
-    /// tracking works out of the box — but exactly once per agent. If the
-    /// user later uninstalls (via Settings or by editing the agent's
-    /// config themselves), launches never silently re-add the entries;
+    /// Offer to install both agents' hooks on the very first launch so
+    /// status tracking works out of the box — but ask first (these write
+    /// into another tool's config files), and ask exactly once. "Not Now"
+    /// never re-prompts and launches never silently re-add the entries;
     /// the Settings → Install button is the only way back in.
     ///
     /// For agents that remain installed, the shared reporter script is
@@ -337,17 +364,35 @@ final class WorkspaceStore: ObservableObject {
     /// is skipped.
     private static func autoInstallAgentHooksOnFirstLaunch(socketPath: String) {
         let defaults = UserDefaults.standard
-        if !defaults.bool(forKey: "glint.claudeHooksAutoInstalled") {
-            AgentHookInstaller.installIfNeeded(socketPath: socketPath)
-            defaults.set(true, forKey: "glint.claudeHooksAutoInstalled")
-        } else if AgentHookInstaller.isInstalled() {
+        let claudeHandled = defaults.bool(forKey: "glint.claudeHooksAutoInstalled")
+        let codexHandled = defaults.bool(forKey: "glint.codexHooksAutoInstalled")
+
+        if claudeHandled, AgentHookInstaller.isInstalled() {
             _ = AgentHookInstaller.ensureReporterScript()
         }
-        if !defaults.bool(forKey: "glint.codexHooksAutoInstalled") {
-            CodexHookInstaller.installIfNeeded(socketPath: socketPath)
-            defaults.set(true, forKey: "glint.codexHooksAutoInstalled")
-        } else if CodexHookInstaller.isInstalled() {
+        if codexHandled, CodexHookInstaller.isInstalled() {
             _ = AgentHookInstaller.ensureReporterScript()
+        }
+        guard !claudeHandled || !codexHandled else { return }
+
+        // Defer past launch so the alert doesn't pop before the main window.
+        Task { @MainActor in
+            let alert = NSAlert()
+            alert.messageText = "Show agent status in the sidebar?"
+            alert.informativeText = "Glint can register a small hook with Claude Code (~/.claude/settings.json) and Codex (~/.codex/hooks.json) that reports when an agent is thinking, finished, or waiting for approval. It only sends events to Glint on this Mac. You can uninstall it anytime in Settings → Agents."
+            alert.addButton(withTitle: "Install Hooks")
+            alert.addButton(withTitle: "Not Now")
+            let install = alert.runModal() == .alertFirstButtonReturn
+            if !claudeHandled {
+                if install { AgentHookInstaller.installIfNeeded(socketPath: socketPath) }
+                defaults.set(true, forKey: "glint.claudeHooksAutoInstalled")
+            }
+            if !codexHandled {
+                if install { CodexHookInstaller.installIfNeeded(socketPath: socketPath) }
+                defaults.set(true, forKey: "glint.codexHooksAutoInstalled")
+            }
+            WorkspaceStore.current?.claudeHooksInstalled = AgentHookInstaller.isInstalled()
+            WorkspaceStore.current?.codexHooksInstalled = CodexHookInstaller.isInstalled()
         }
     }
 
@@ -393,6 +438,12 @@ final class WorkspaceStore: ObservableObject {
 
     private var saveCancellable: AnyCancellable?
     private var cwdTimer: Timer?
+    private var observerTokens: [NSObjectProtocol] = []
+
+    /// The app's single live store. AppDelegate consults it for the quit
+    /// confirmation (it has no other path to the store — the store is
+    /// created by GlintApp as a @StateObject).
+    static private(set) weak var current: WorkspaceStore?
 
     init() {
         let loaded = Persistence.load() ?? PersistedState.fresh
@@ -402,21 +453,26 @@ final class WorkspaceStore: ObservableObject {
             ? (loaded.selectedWorkspaceID ?? loaded.workspaces.first?.id)
             : loaded.workspaces.first?.id
         self.sidebarCollapsed = loaded.sidebarCollapsed
+        Self.current = self
 
         // Debounced autosave: any @Published change → save 0.5s later.
         saveCancellable = objectWillChange
             .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.persist() }
 
-        // Sweep live surface cwds every few seconds so a crash/quit still
-        // leaves recent dirs persisted. Uses a Timer.weakWrapper so we don't
-        // retain self forever.
+        // Sweep live surface cwds every second so a crash/quit still leaves
+        // recent dirs persisted. The closure captures self weakly so the
+        // repeating timer doesn't retain the store forever.
         cwdTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.captureCwdsFromLiveSurfaces() }
         }
 
+        // Block-based observers hold their tokens in `observerTokens`; the
+        // store currently lives as long as the app, but if it's ever torn
+        // down (multi-window, tests) deinit removes them cleanly.
+
         // Final flush + save on app terminate.
-        NotificationCenter.default.addObserver(
+        observerTokens.append(NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
@@ -425,41 +481,58 @@ final class WorkspaceStore: ObservableObject {
                 self?.captureCwdsFromLiveSurfaces()
                 self?.persist()
             }
-        }
+        })
 
         // Event-driven cwd updates: ghostty fires this when a shell reports
         // its working directory via OSC 7.
-        NotificationCenter.default.addObserver(
+        observerTokens.append(NotificationCenter.default.addObserver(
             forName: .ghosttyCwdChanged,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.captureCwdsFromLiveSurfaces() }
-        }
+        })
+
+        // "✓ done" is an unread badge cleared by *seeing* the workspace.
+        // Selecting it is one way; the other is ⌘Tab-ing back to Glint while
+        // already on it — without this, the badge would outlast the look.
+        observerTokens.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let id = self.selectedWorkspaceID else { return }
+                self.acknowledgeCompletionIfNeeded(for: id)
+            }
+        })
 
         // Boot the CLI-agent IPC channel and route hook events into pane state.
         AgentBridge.shared.start()
         Self.autoInstallAgentHooksOnFirstLaunch(socketPath: AgentBridge.shared.socketPath)
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
-        NotificationCenter.default.addObserver(
+        observerTokens.append(NotificationCenter.default.addObserver(
             forName: .glintAgentEvent,
             object: nil,
             queue: .main
         ) { [weak self] note in
             Task { @MainActor in self?.handleAgentEvent(note.userInfo) }
-        }
-        NotificationCenter.default.addObserver(
+        })
+        observerTokens.append(NotificationCenter.default.addObserver(
             forName: .glintPaneEscPressed,
             object: nil,
             queue: .main
         ) { [weak self] note in
             Task { @MainActor in self?.handlePaneEsc(note.userInfo) }
-        }
+        })
     }
 
     deinit {
         cwdTimer?.invalidate()
+        for token in observerTokens {
+            NotificationCenter.default.removeObserver(token)
+        }
     }
 
     // MARK: surface registry
@@ -494,7 +567,13 @@ final class WorkspaceStore: ObservableObject {
             for paneID in workspaces[i].panes.keys {
                 let key = WorkspacePaneKey(workspace: wsID, pane: paneID)
                 guard let view = surfaceViews[key] else { continue }
-                if let cwd = view.currentCwd() {
+                // Only write when the value actually changed: an unconditional
+                // subscript write on a @Published array fires objectWillChange
+                // every tick, and since this poll (1s) outpaces the autosave
+                // debounce (0.5s) that meant a JSON encode + disk write every
+                // second for the app's whole lifetime.
+                if let cwd = view.currentCwd(),
+                   workspaces[i].panes[paneID]?.workingDirectory != cwd {
                     workspaces[i].panes[paneID]?.workingDirectory = cwd
                 }
                 if let name = view.foregroundProcessName() {
@@ -546,9 +625,11 @@ final class WorkspaceStore: ObservableObject {
         let agentStr = (info["agent"] as? String) ?? "claude"
         let kind: PaneAgentKind = (agentStr == "codex") ? .codex : .claude
 
-        // Force-mark the pane process name so the icon flips even when
-        // tcgetpgrp still reports zsh (the CLI agent runs as a Node child).
-        paneProcesses[key] = (kind == .codex) ? "codex" : "claude"
+        // Note: we deliberately do NOT force-write paneProcesses here. The
+        // 1s poller owns that dictionary and replaces it wholesale, so any
+        // value written from this path lived at most one tick. Icon/state
+        // already prefer paneAgentState (set below), which this event keeps
+        // authoritative.
 
         var state = paneAgentState[key]
             ?? PaneAgentState(kind: kind, status: .idle, detail: nil, updatedAt: Date())
@@ -689,15 +770,94 @@ final class WorkspaceStore: ObservableObject {
         workspaces[i].focusedPane = new
     }
 
+    /// Shells whose presence as the foreground process means "nothing of
+    /// value is running" — closing the pane loses no work. Shared by the
+    /// close-confirmation check and the workspace icon picker.
+    static let benignShells: Set<String> = ["zsh", "bash", "fish", "sh", "dash", "ksh", "login", "tmux"]
+
+    /// True when killing this pane would interrupt real work: a CLI agent
+    /// with a live session (even an idle one — closing kills the session),
+    /// or any non-shell foreground process (vim, ssh, a build, …).
+    func paneNeedsCloseConfirmation(_ key: WorkspacePaneKey) -> Bool {
+        if paneAgentState[key] != nil,
+           let name = paneProcesses[key]?.lowercased(),
+           name.contains("claude") || name.contains("codex") {
+            return true
+        }
+        if let s = paneAgentState[key]?.status,
+           s == .thinking || s == .tool || s == .compacting || s == .needsPermission {
+            return true
+        }
+        if let name = paneProcesses[key]?.lowercased(), !name.isEmpty,
+           !Self.benignShells.contains(name) {
+            return true
+        }
+        return false
+    }
+
+    /// Number of panes (across all workspaces) that would warrant a
+    /// confirmation before being killed. Drives the quit confirmation.
+    var panesNeedingQuitConfirmation: Int {
+        var n = 0
+        for ws in workspaces {
+            for paneID in ws.panes.keys
+            where paneNeedsCloseConfirmation(WorkspacePaneKey(workspace: ws.id, pane: paneID)) {
+                n += 1
+            }
+        }
+        return n
+    }
+
+    /// Modal confirm for destructive actions, with a "Don't ask again"
+    /// suppression checkbox persisted per action kind. Returns true when
+    /// the action should proceed.
+    static func confirmDestruction(message: String, informative: String,
+                                   confirmTitle: String, suppressionKey: String) -> Bool {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: suppressionKey) { return true }
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = informative
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: confirmTitle)
+        alert.addButton(withTitle: "Cancel")
+        alert.showsSuppressionButton = true
+        alert.suppressionButton?.title = "Don't ask again"
+        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        if alert.suppressionButton?.state == .on {
+            defaults.set(true, forKey: suppressionKey)
+        }
+        return true
+    }
+
     func closeFocused() {
         guard let i = currentIndex else { return }
-        guard workspaces[i].panes.count > 1 else { return }
+        guard workspaces[i].panes.count > 1 else {
+            // The last pane can't be closed (a workspace is never empty).
+            // Beep instead of a silent no-op so ⌘W at least acknowledges
+            // the keypress.
+            NSSound.beep()
+            return
+        }
         let target = workspaces[i].focusedPane
+        let key = WorkspacePaneKey(workspace: workspaces[i].id, pane: target)
+        if paneNeedsCloseConfirmation(key),
+           !Self.confirmDestruction(
+               message: "Close this pane?",
+               informative: "Something is still running in it and will be terminated.",
+               confirmTitle: "Close Pane",
+               suppressionKey: "glint.suppressClosePaneConfirm"
+           ) {
+            return
+        }
         let (newRoot, survivor) = Self.removeLeaf(workspaces[i].root, target: target)
         if let newRoot { workspaces[i].root = newRoot }
         workspaces[i].panes.removeValue(forKey: target)
-        let key = WorkspacePaneKey(workspace: workspaces[i].id, pane: target)
         surfaceViews.removeValue(forKey: key)
+        // Drop the non-persistent side state too, or closed panes linger as
+        // ghost entries forever.
+        paneAgentState.removeValue(forKey: key)
+        paneProcesses.removeValue(forKey: key)
         workspaces[i].focusedPane = survivor
             ?? workspaces[i].panes.keys.sorted { $0.value < $1.value }.first
             ?? PaneID(value: 0)
@@ -711,6 +871,14 @@ final class WorkspaceStore: ObservableObject {
         workspaces[i].focusedPane = leaves[(pos + 1) % leaves.count]
     }
 
+    func focusPrevious() {
+        guard let i = currentIndex else { return }
+        let leaves = Self.collectLeaves(workspaces[i].root).sorted { $0.value < $1.value }
+        guard !leaves.isEmpty,
+              let pos = leaves.firstIndex(of: workspaces[i].focusedPane) else { return }
+        workspaces[i].focusedPane = leaves[(pos - 1 + leaves.count) % leaves.count]
+    }
+
     func focus(_ id: PaneID) {
         guard let i = currentIndex else { return }
         workspaces[i].focusedPane = id
@@ -719,6 +887,24 @@ final class WorkspaceStore: ObservableObject {
     func selectWorkspace(_ id: UUID) {
         selectedWorkspaceID = id
         acknowledgeCompletionIfNeeded(for: id)
+    }
+
+    /// Select the nth workspace in sidebar order (0-based). Used by the
+    /// ⌘1…⌘9 menu shortcuts; out-of-range indices are ignored.
+    func selectWorkspace(at index: Int) {
+        guard workspaces.indices.contains(index) else { return }
+        selectWorkspace(workspaces[index].id)
+    }
+
+    /// Set the ratio of the split addressed by `path` in the current
+    /// workspace's tree. `path` is the chain of branch choices walking down
+    /// from the root (false = first child, true = second child); the empty
+    /// path addresses the root split. Driven by divider drags in
+    /// PaneTreeView; persisted with the rest of the tree.
+    func setSplitRatio(path: [Bool], ratio: CGFloat) {
+        guard let i = currentIndex else { return }
+        let clamped = min(max(ratio, 0.1), 0.9)
+        workspaces[i].root = Self.settingRatio(workspaces[i].root, path: path[...], ratio: clamped)
     }
 
     /// Cycle to the next workspace in sidebar order, wrapping at the end.
@@ -743,9 +929,23 @@ final class WorkspaceStore: ObservableObject {
     func deleteWorkspace(_ id: UUID) {
         guard let idx = workspaces.firstIndex(where: { $0.id == id }) else { return }
 
+        let busyPanes = workspaces[idx].panes.keys
+            .filter { paneNeedsCloseConfirmation(WorkspacePaneKey(workspace: id, pane: $0)) }
+        if !busyPanes.isEmpty,
+           !Self.confirmDestruction(
+               message: "Delete “\(workspaces[idx].displayName)”?",
+               informative: "\(busyPanes.count) of its panes still have something running; everything in this workspace will be terminated.",
+               confirmTitle: "Delete Workspace",
+               suppressionKey: "glint.suppressDeleteWorkspaceConfirm"
+           ) {
+            return
+        }
+
         // Drop every surface tied to this workspace (their ghostty surfaces
         // get freed in GhosttySurfaceView.deinit when the dict releases them).
         surfaceViews = surfaceViews.filter { $0.key.workspace != id }
+        paneAgentState = paneAgentState.filter { $0.key.workspace != id }
+        paneProcesses = paneProcesses.filter { $0.key.workspace != id }
 
         let wasSelected = selectedWorkspaceID == id
         workspaces.remove(at: idx)
@@ -835,6 +1035,17 @@ final class WorkspaceStore: ObservableObject {
             if let nb, sb != nil { return (.split(direction: dir, ratio: r, a: a, b: nb), sb) }
             return (node, nil)
         }
+    }
+
+    private static func settingRatio(_ node: SplitNode, path: ArraySlice<Bool>, ratio: CGFloat) -> SplitNode {
+        guard case .split(let dir, let r, let a, let b) = node else { return node }
+        guard let head = path.first else {
+            return .split(direction: dir, ratio: ratio, a: a, b: b)
+        }
+        let rest = path.dropFirst()
+        return head
+            ? .split(direction: dir, ratio: r, a: a, b: settingRatio(b, path: rest, ratio: ratio))
+            : .split(direction: dir, ratio: r, a: settingRatio(a, path: rest, ratio: ratio), b: b)
     }
 
     private static func firstLeaf(_ node: SplitNode) -> PaneID {
@@ -972,8 +1183,7 @@ extension WorkspaceStore {
         if names.contains(where: { $0 == "git" }) { return .git }
 
         // Anything non-shell still gets a hint — show the binary's initial.
-        let shells: Set<String> = ["zsh", "bash", "fish", "sh", "dash", "ksh", "login", "tmux"]
-        if let custom = names.first(where: { !shells.contains($0) && !$0.isEmpty }) {
+        if let custom = names.first(where: { !Self.benignShells.contains($0) && !$0.isEmpty }) {
             return .other(custom)
         }
         return .shell

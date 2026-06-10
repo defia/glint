@@ -1,9 +1,14 @@
 import AppKit
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static let frameDefaultsKey = "glint.mainWindowFrame"
     private weak var mainWindow: NSWindow?
+    private var closeGuard: CloseGuardWindowDelegate?
+    /// Set when the user already confirmed termination through the window's
+    /// close button — applicationShouldTerminate must not ask a second time.
+    fileprivate var didConfirmViaWindowClose = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -34,6 +39,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Closing the window already ran this confirmation (and the window
+        // is gone by now) — don't ask twice on the way out.
+        if didConfirmViaWindowClose { return .terminateNow }
+        if Self.confirmTerminationIfBusy() { return .terminateNow }
+        return .terminateCancel
+    }
+
+    /// Shared by ⌘Q and the window close button: if any pane still has real
+    /// work running (agent mid-turn, non-shell process), ask before killing
+    /// everything. Returns true when termination should proceed.
+    fileprivate static func confirmTerminationIfBusy() -> Bool {
+        let busy = WorkspaceStore.current?.panesNeedingQuitConfirmation ?? 0
+        guard busy > 0 else { return true }
+        return WorkspaceStore.confirmDestruction(
+            message: "Quit Glint?",
+            informative: busy == 1
+                ? "1 pane still has something running; quitting will terminate it."
+                : "\(busy) panes still have something running; quitting will terminate all of them.",
+            confirmTitle: "Quit",
+            suppressionKey: "glint.suppressQuitConfirm"
+        )
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Belt-and-suspenders: save the frame at quit even if didMove /
         // didEndLiveResize never fired this session (e.g. user opens, never
@@ -55,6 +84,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Sidebar inset to nothing — we draw chrome ourselves
         window.toolbar = nil
 
+        // Intercept the close button so closing the (only) window — which
+        // terminates the app — gets the same "work is still running"
+        // confirmation as ⌘Q. All other delegate traffic forwards to the
+        // delegate SwiftUI installed.
+        let guardDelegate = CloseGuardWindowDelegate(original: window.delegate, appDelegate: self)
+        window.delegate = guardDelegate
+        closeGuard = guardDelegate
+
         // We manage the frame ourselves. SwiftUI's WindowGroup assigns its
         // own `frameAutosaveName` (derived from the modifier chain on
         // ContentView) and re-asserts it after we set our own — so
@@ -64,7 +101,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainWindow = window
         if let saved = UserDefaults.standard.string(forKey: Self.frameDefaultsKey) {
             let rect = NSRectFromString(saved)
-            if rect.width > 0 && rect.height > 0 {
+            // Guard against restoring to a screen that no longer exists
+            // (e.g. external display unplugged) — an off-screen window is
+            // unrecoverable without defaults surgery.
+            if rect.width > 0 && rect.height > 0 && Self.frameIsReasonablyVisible(rect) {
                 window.setFrame(rect, display: true, animate: false)
             } else {
                 applyDefaultFrame(window)
@@ -80,6 +120,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                        name: NSWindow.didEndLiveResizeNotification, object: window)
     }
 
+    /// True when enough of `rect` lands on some present screen for the user
+    /// to grab the title-bar area and recover the window themselves.
+    private static func frameIsReasonablyVisible(_ rect: NSRect) -> Bool {
+        for screen in NSScreen.screens {
+            let overlap = rect.intersection(screen.visibleFrame)
+            if overlap.width >= 200 && overlap.height >= 100 { return true }
+        }
+        return false
+    }
+
     private func applyDefaultFrame(_ window: NSWindow) {
         window.setContentSize(NSSize(width: 1320, height: 824))
         window.center()
@@ -88,5 +138,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func persistMainWindowFrame() {
         guard let window = mainWindow else { return }
         UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: Self.frameDefaultsKey)
+    }
+}
+
+/// NSWindowDelegate proxy: answers `windowShouldClose` itself (running the
+/// busy-work confirmation) and forwards everything else to the delegate
+/// SwiftUI installed, which does scene lifecycle bookkeeping we must not
+/// break. Holds the original strongly — `NSWindow.delegate` is weak, so
+/// once we replace it nothing else is guaranteed to keep it alive.
+@MainActor
+private final class CloseGuardWindowDelegate: NSObject, NSWindowDelegate {
+    private let original: NSWindowDelegate?
+    private weak var appDelegate: AppDelegate?
+
+    init(original: NSWindowDelegate?, appDelegate: AppDelegate) {
+        self.original = original
+        self.appDelegate = appDelegate
+    }
+
+    override func responds(to aSelector: Selector!) -> Bool {
+        if super.responds(to: aSelector) { return true }
+        return original?.responds(to: aSelector) ?? false
+    }
+
+    override func forwardingTarget(for aSelector: Selector!) -> Any? {
+        if let original, original.responds(to: aSelector) { return original }
+        return super.forwardingTarget(for: aSelector)
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard AppDelegate.confirmTerminationIfBusy() else { return false }
+        // Remember the confirmation: this close terminates the app, and
+        // applicationShouldTerminate should not re-ask after the window
+        // is already gone.
+        appDelegate?.didConfirmViaWindowClose = true
+        if let original,
+           original.responds(to: #selector(NSWindowDelegate.windowShouldClose(_:))) {
+            return original.windowShouldClose?(sender) ?? true
+        }
+        return true
     }
 }
