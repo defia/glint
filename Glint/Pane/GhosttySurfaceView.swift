@@ -6,12 +6,14 @@ import GhosttyKit
 /// AppKit view hosting one `ghostty_surface_t`.
 ///
 /// We give ghostty an `NSView*` via `ghostty_surface_config_s.platform.macos.nsview`.
-/// The view's backing layer is a `CAMetalLayer` we install ourselves via
-/// `makeBackingLayer` — ghostty's renderer sees the existing layer and draws
-/// straight into it instead of inserting a sublayer. Owning the layer lets us
-/// resize the drawable atomically with the view bounds inside a CATransaction
-/// (disableActions=true), which is what kills the resize stretch/tear that
-/// happens when AppKit and the renderer disagree about size for one frame.
+/// At surface creation ghostty's Metal renderer REPLACES `view.layer` with its
+/// own `IOSurfaceLayer` — a plain CALayer whose `contents` it swaps to a freshly
+/// drawn IOSurface each frame (see ghostty/src/renderer/Metal.zig). So nothing
+/// we configure on a layer of our own survives past `createSurface()`; the
+/// initial layer only provides the background color before the first frame.
+/// Frame presentation runs through the main queue (`IOSurfaceLayer.setSurface`
+/// dispatches the contents swap), so keeping the main thread responsive is
+/// load-bearing for terminal frame pacing.
 final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     private var surface: ghostty_surface_t?
@@ -53,12 +55,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         self.agentSocketPath = agentSocketPath
         super.init(frame: frame)
         wantsLayer = true
+        // Placeholder until ghostty installs its IOSurfaceLayer — matches the
+        // terminal background so new panes don't flash white pre-first-frame.
         layer?.backgroundColor = NSColor(red: 0.043, green: 0.039, blue: 0.078, alpha: 1.0).cgColor
-        // CAMetalLayer otherwise re-projects whatever was there from the old
-        // drawableSize onto the new bounds for one frame — that's the visible
-        // "stretch" during live resize. Pinning the layer to its center stops
-        // the rubber-banding even if a frame slips past our CATransaction.
-        layer?.contentsGravity = .center
         // Accept file drops from Finder; on drop we paste the shell-quoted
         // path so users can `cd <drop>` without typing it.
         registerForDraggedTypes([.fileURL])
@@ -68,25 +67,6 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     deinit {
         if let s = surface { ghostty_surface_free(s) }
-    }
-
-    /// Install a CAMetalLayer as the view's backing layer. Ghostty's macOS
-    /// apprt checks `view.layer` at surface-creation time; finding a
-    /// CAMetalLayer here means it renders directly into this layer instead
-    /// of inserting its own sublayer — which is what lets `setFrameSize`
-    /// resize the drawable atomically with the view bounds below.
-    override func makeBackingLayer() -> CALayer {
-        let metalLayer = CAMetalLayer()
-        metalLayer.pixelFormat = .bgra8Unorm
-        // Pane background is a solid color (see applyGlintTheme); no
-        // translucency in the terminal area itself, only in the chrome.
-        // `framebufferOnly = true` keeps Metal's tile-memory optimizations
-        // and prevents the compositor from sampling the drawable mid-
-        // render (which manifests as tearing during fast scroll).
-        // `isOpaque = true` lets the compositor skip blending.
-        metalLayer.framebufferOnly = true
-        metalLayer.isOpaque = true
-        return metalLayer
     }
 
     override func viewDidMoveToWindow() {
@@ -325,32 +305,25 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         syncSurfaceSize(pointsSize: bounds.size)
     }
 
-    /// Push (drawableSize, contentsScale, ghostty surface size) in one
-    /// CATransaction with implicit animations disabled. This is what kills
-    /// the visible stretch during live resize: AppKit changes the view's
-    /// bounds in the same transaction that the Metal layer's backing
-    /// store and ghostty's grid both pick up the new pixel size — so the
-    /// compositor never gets a frame where the drawable's old size has
-    /// to be projected onto the new bounds.
+    /// Push (contentsScale, ghostty surface size) in one CATransaction with
+    /// implicit animations disabled, so the bounds change and ghostty's grid
+    /// resize land in the same commit. Ghostty discards stale-sized frames on
+    /// present (`IOSurfaceLayer.setSurfaceCallback` checks surface size against
+    /// layer bounds × contentsScale), so keeping bounds and scale coherent
+    /// within one transaction is what prevents live-resize stretch.
     private func syncSurfaceSize(pointsSize: NSSize) {
         guard let s = surface else { return }
         let scale = window?.backingScaleFactor ?? 2.0
         let pixelWidth = floor(pointsSize.width * scale)
         let pixelHeight = floor(pointsSize.height * scale)
         guard pixelWidth > 0, pixelHeight > 0 else { return }
-        let drawableSize = CGSize(width: pixelWidth, height: pixelHeight)
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        // ghostty's IOSurfaceLayer only learns the scale at surface creation;
+        // re-push so cross-display moves (Retina ↔ non-Retina) re-rasterise
+        // at the right DPI. It reads layer.contentsScale when sizing frames.
         layer?.contentsScale = scale
-        if let metalLayer = layer as? CAMetalLayer,
-           metalLayer.drawableSize != drawableSize {
-            metalLayer.drawableSize = drawableSize
-        }
-        // Mirror what standalone ghostty's viewDidChangeBackingProperties
-        // does: tell the renderer the per-axis content scale so glyph
-        // rasterisation matches the screen's DPI. Without this, scale set
-        // only at surface creation drifts on cross-display moves.
         ghostty_surface_set_content_scale(s, scale, scale)
         ghostty_surface_set_size(s, UInt32(pixelWidth), UInt32(pixelHeight))
         CATransaction.commit()
