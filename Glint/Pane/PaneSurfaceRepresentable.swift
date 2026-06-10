@@ -6,7 +6,10 @@ import AppKit
 /// the surface itself outlives that and just re-parents.
 struct PaneSurfaceRepresentable: NSViewRepresentable {
     let surfaceView: GhosttySurfaceView
-    @Binding var focused: Bool
+    /// Plain value, not a Binding: focus only flows store → AppKit here.
+    /// The reverse direction (clicks) goes through store.focus(_:), so a
+    /// writable binding would just be a lie about the data flow.
+    let focused: Bool
 
     func makeNSView(context: Context) -> NSView {
         let container = NoDragContainerView()
