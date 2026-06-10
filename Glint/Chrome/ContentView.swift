@@ -561,10 +561,7 @@ private struct WorkspaceMicroIcon: View {
             }
         }
         .frame(width: size, height: size)
-        .background(
-            RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-                .fill(isClaude ? Color.clear : ws.accent)
-        )
+        // Bare glyphs, same as the sidebar cards (see workspaceIcon).
         .clipShape(RoundedRectangle(cornerRadius: size * 0.26, style: .continuous))
     }
 }

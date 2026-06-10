@@ -14,6 +14,7 @@ struct SidebarView: View {
     /// the search field must vanish with them (same fix as ToolbarHeader's
     /// 78pt gutter).
     @State private var isFullscreen = false
+    @State private var newWorkspaceHovered = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -92,25 +93,35 @@ struct SidebarView: View {
             HStack(spacing: 10) {
                 Image(systemName: "plus")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.text3)
+                    .foregroundStyle(Theme.accentBright)
                     .frame(width: 28, height: 28)
                     .background(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(Theme.divider, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                            .fill(Theme.accent.opacity(newWorkspaceHovered ? 0.30 : 0.18))
                     )
                 Text("New Workspace")
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(Theme.text3)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(newWorkspaceHovered ? Theme.text1 : Theme.text2)
                 Spacer()
             }
             .padding(8)
             .background(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(Theme.divider, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    .fill(Color.white.opacity(newWorkspaceHovered ? 0.06 : 0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(
+                        newWorkspaceHovered
+                            ? Theme.accent.opacity(0.45)
+                            : Theme.border
+                    )
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { newWorkspaceHovered = $0 }
+        .animation(.easeOut(duration: 0.16), value: newWorkspaceHovered)
     }
 
     private var searchField: some View {
@@ -176,7 +187,7 @@ struct SidebarView: View {
 private struct WorkspaceCard: View {
     @EnvironmentObject var store: WorkspaceStore
     /// System "Reduce Motion" — when on, the looping decorations (border
-    /// comet, pulsing dots/borders, mascot GIF) render as static states.
+    /// glow, pulsing dots/borders, mascot animation) render as static states.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let ws: Workspace
     @Binding var draggingID: UUID?
@@ -246,6 +257,9 @@ private struct WorkspaceCard: View {
         .overlay(cardBorder(active: active, status: status).accessibilityHidden(true))
         .overlay(completionFlashOverlay.accessibilityHidden(true))
         .overlay(permissionPulseOverlay(status: status).accessibilityHidden(true))
+        .overlay(alignment: .leading) {
+            workingBeaconOverlay(status: status).accessibilityHidden(true)
+        }
         .scaleEffect(isHovered ? 1.005 : 1.0, anchor: .center)
         .shadow(color: Color.black.opacity(isHovered ? 0.22 : 0),
                 radius: isHovered ? 6 : 0,
@@ -361,44 +375,24 @@ private struct WorkspaceCard: View {
             if case .codex = kind { return true }
             return false
         }()
-        // Claude's gif mascot and Codex's official gradient mark both ship
-        // their own colors — render them bare, no accent squircle behind.
-        let bare = isClaude || isCodex
         return Group {
             if isClaude {
                 ClaudeMascotIcon(status: status)
             } else if isCodex {
-                Image("CodexMark")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 24, height: 24)
+                CodexMascotIcon(status: status)
             } else if let sf = kind.sfSymbol {
+                // No squircle container — a bit larger so the bare glyph
+                // holds the same visual weight as the mascots.
                 Image(systemName: sf)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.9))
             } else {
                 Text(kind.letter)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
             }
         }
         .frame(width: 28, height: 28)
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(bare ? Color.clear : ws.accent)
-                if active && !bare {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.white.opacity(0.18), .clear],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                }
-            }
-        )
         .overlay(alignment: .bottomTrailing) {
             AgentStatusDot(status: status)
                 .offset(x: 3, y: 3)
@@ -409,7 +403,7 @@ private struct WorkspaceCard: View {
                     ? Color(red: 0.92, green: 0.55, blue: 0.32).opacity(0.5)
                     : isCodex
                         ? Color(red: 0.32, green: 0.38, blue: 1.0).opacity(0.5)
-                        : ws.accent.opacity(0.5))
+                        : Theme.accent.opacity(0.5))
                 : .clear,
             radius: 8
         )
@@ -523,14 +517,14 @@ private struct WorkspaceCard: View {
     /// that breathes between 0.25 and 0.85 alpha on a 1.2s cycle. The
     /// breathing is a Core Animation opacity loop on the render server —
     /// a SwiftUI `repeatForever` here re-renders the card every frame on
-    /// the main thread (see CardBorderTraveler).
+    /// the main thread (see EdgeBeacon).
     @ViewBuilder
     private func permissionPulseOverlay(status: PaneAgentStatus?) -> some View {
         if status == .needsPermission {
             BreathingBorder(
-                color: NSColor(red: 1.0, green: 0.45, blue: 0.42, alpha: 1.0),
+                color: NSColor(Theme.accentBright),
                 cornerRadius: 9,
-                lineWidth: 1.5,
+                lineWidth: 1.4,
                 // Reduce Motion: hold the border at full strength instead
                 // of breathing — still unmistakably "needs attention".
                 animates: !reduceMotion
@@ -539,38 +533,35 @@ private struct WorkspaceCard: View {
         }
     }
 
-    @ViewBuilder
     private func cardBorder(active: Bool, status: PaneAgentStatus?) -> some View {
-        // Reduce Motion: skip the orbiting comet and fall through to the
-        // static status-colored border, which carries the same information.
-        if let status, isWorking(status), !reduceMotion {
-            // Active turn: the comet replaces the static colored border and
-            // makes it obvious from across the sidebar that something's
-            // running. Compaction uses dual comets to look distinct.
-            CardBorderTraveler(
-                color: borderTravelerColor(status),
-                cornerRadius: 9,
-                dual: status == .compacting
+        // Running turns leave the border alone — the edge beacon and the
+        // traffic-light pill carry "busy". The border only marks selection
+        // and the two terminal states (permission / done).
+        RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .strokeBorder(
+                cardBorderColor(active: active, status: status),
+                lineWidth: 1
             )
-        } else {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(
-                    cardBorderColor(active: active, status: status),
-                    lineWidth: cardBorderWidth(status: status)
-                )
+    }
+
+    /// While a turn is running, a small accent bar breathes on the card's
+    /// left edge — the busy signal lives there instead of the border.
+    @ViewBuilder
+    private func workingBeaconOverlay(status: PaneAgentStatus?) -> some View {
+        if let status, isWorking(status) {
+            EdgeBeacon(
+                color: NSColor(Theme.accentBright),
+                fast: status == .compacting,
+                animates: !reduceMotion
+            )
+            .frame(width: 3, height: 30)
+            .offset(x: -1)
+            .allowsHitTesting(false)
         }
     }
 
     private func isWorking(_ s: PaneAgentStatus) -> Bool {
         s == .thinking || s == .tool || s == .compacting
-    }
-
-    private func borderTravelerColor(_ s: PaneAgentStatus) -> Color {
-        switch s {
-        case .thinking, .tool: return Color(red: 0.72, green: 0.68, blue: 1.0)
-        case .compacting:      return Color(red: 0.43, green: 0.72, blue: 0.86)
-        default:               return Color.white.opacity(0.2)
-        }
     }
 
     private var cwdLine: String {
@@ -639,24 +630,14 @@ private struct WorkspaceCard: View {
         }
     }
 
+    /// One hue for every border: status semantics live in the traffic-light
+    /// pill and the edge beacon, so the border only highlights the states
+    /// that demand a look (permission / done) plus selection.
     private func cardBorderColor(active: Bool, status: PaneAgentStatus?) -> Color {
-        if let status, status != .idle {
-            switch status {
-            case .needsPermission:  return Color(red: 1.0, green: 0.32, blue: 0.29).opacity(0.85)
-            case .justCompleted:    return Color(red: 0.30, green: 0.82, blue: 0.50).opacity(0.85)
-            case .thinking, .tool:  return Color(red: 0.55, green: 0.50, blue: 0.95).opacity(0.55)
-            case .compacting:       return Color(red: 0.35, green: 0.66, blue: 0.82).opacity(0.6)
-            case .idle:             break
-            }
+        if status == .needsPermission || status == .justCompleted {
+            return Theme.accentBright.opacity(0.75)
         }
-        return active ? ws.accent.opacity(0.45) : Color.white.opacity(0.04)
-    }
-
-    private func cardBorderWidth(status: PaneAgentStatus?) -> CGFloat {
-        switch status {
-        case .needsPermission, .justCompleted: return 1.5
-        default:                                return 1
-        }
+        return active ? Theme.accent.opacity(0.45) : Color.white.opacity(0.04)
     }
 
     private func prettyCwd(_ path: String) -> String {
@@ -726,6 +707,53 @@ private struct ClaudeMascotIcon: View {
             return "ClaudeToolCall"
         case .some(.compacting):
             return "ClaudeCompressing"
+        }
+    }
+}
+
+/// Codex's gradient-cloud mark (generate_codex_action_gifs.py), animated
+/// per agent status the same way ClaudeMascotIcon is: working = blinking
+/// cursor, thinking = sway + cursor fade, everything else = the static
+/// idle frame. Done shares idle by design — the celebrate scale pop and
+/// the corner badge's green light carry the moment.
+private struct CodexMascotIcon: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let status: PaneAgentStatus?
+    @State private var celebrateScale: CGFloat = 1.0
+    @State private var tapScale: CGFloat = 1.0
+
+    var body: some View {
+        AnimatedGIFView(assetName: gifAssetName(for: status), animates: !reduceMotion)
+            // The blob fills ~80% of the 128px canvas (the margin is
+            // sway headroom), so 30pt renders the mark itself at ~24pt —
+            // same visual size as the static CodexMark it replaced.
+            .frame(width: 30, height: 30)
+            .frame(width: 28, height: 28)
+            .scaleEffect(celebrateScale * tapScale, anchor: .bottom)
+            .onChange(of: status) { oldStatus, newStatus in
+                if newStatus == .justCompleted && oldStatus != .justCompleted {
+                    celebrateScale = 1.22
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
+                        celebrateScale = 1.0
+                    }
+                }
+            }
+            .onTapGesture {
+                tapScale = 0.85
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.5)) {
+                    tapScale = 1.0
+                }
+            }
+    }
+
+    private func gifAssetName(for s: PaneAgentStatus?) -> String {
+        switch s {
+        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted):
+            return "CodexIdle"
+        case .some(.thinking), .some(.compacting):
+            return "CodexThinking"
+        case .some(.tool):
+            return "CodexWorking"
         }
     }
 }
@@ -847,23 +875,32 @@ private final class GIFFrameCache {
     }
 
     private static func frameDelay(_ src: CGImageSource, _ index: Int) -> Double {
-        guard let props = CGImageSourceCopyPropertiesAtIndex(src, index, nil) as? [CFString: Any],
-              let gifProps = props[kCGImagePropertyGIFDictionary] as? [CFString: Any] else {
+        guard let props = CGImageSourceCopyPropertiesAtIndex(src, index, nil) as? [CFString: Any] else {
             return 0.1
         }
-        let unclamped = gifProps[kCGImagePropertyGIFUnclampedDelayTime] as? Double ?? 0
-        let clamped = gifProps[kCGImagePropertyGIFDelayTime] as? Double ?? 0.1
+        var unclamped = 0.0
+        var clamped = 0.1
+        if let gifProps = props[kCGImagePropertyGIFDictionary] as? [CFString: Any] {
+            unclamped = gifProps[kCGImagePropertyGIFUnclampedDelayTime] as? Double ?? 0
+            clamped = gifProps[kCGImagePropertyGIFDelayTime] as? Double ?? 0.1
+        } else if let pngProps = props[kCGImagePropertyPNGDictionary] as? [CFString: Any] {
+            // APNG (the Codex icons): GIF transparency is 1-bit, so any
+            // asset whose animation needs real alpha ships as APNG instead.
+            unclamped = pngProps[kCGImagePropertyAPNGUnclampedDelayTime] as? Double ?? 0
+            clamped = pngProps[kCGImagePropertyAPNGDelayTime] as? Double ?? 0.1
+        }
         // Browsers clamp tiny delays to ~100ms; honor the unclamped value
         // when present but never spin faster than 50fps.
         return max(unclamped > 0 ? unclamped : clamped, 0.02)
     }
 }
 
-/// Tiny circle in the squircle's corner reflecting the agent's mood:
-///   thinking/tool → pulsing purple
-///   waiting       → amber
-///   needsPerm     → red
-///   idle / nil    → invisible
+/// Traffic-light pill in the squircle's corner reflecting the agent's
+/// mood: three lights in a dark capsule, the current one lit.
+///   red    → needsPermission (blocked on the user)
+///   yellow → thinking / tool / compacting (busy)
+///   green  → justCompleted
+///   idle / nil → invisible
 private struct AgentStatusDot: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let status: PaneAgentStatus?
@@ -871,96 +908,85 @@ private struct AgentStatusDot: View {
     var body: some View {
         Group {
             if let status, status != .idle {
-                ZStack {
-                    // The scale/opacity pulse runs as a Core Animation loop
-                    // on the render server — a SwiftUI `repeatForever` here
-                    // re-renders every frame on the main thread (see
-                    // CardBorderTraveler).
-                    PulsingDot(
-                        color: NSColor(color(for: status)),
-                        pulsing: needsPulse(status)
-                    )
-                    if status == .justCompleted {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 6, weight: .heavy))
-                            .foregroundStyle(.white)
-                    }
-                }
-                .frame(width: 10, height: 10)
+                // The lit light's pulse runs as a Core Animation loop on
+                // the render server — a SwiftUI `repeatForever` here
+                // re-renders every frame on the main thread (see
+                // EdgeBeacon).
+                TrafficLightPill(
+                    activeLight: light(for: status),
+                    pulsing: needsPulse(status)
+                )
+                .frame(width: 20, height: 11)
             }
         }
     }
 
-    private func color(for s: PaneAgentStatus) -> Color {
+    private func light(for s: PaneAgentStatus) -> TrafficLightPill.Light {
         switch s {
-        case .thinking, .tool:  return Color(red: 0.55, green: 0.50, blue: 0.95)
-        case .needsPermission:  return Color(red: 1.0, green: 0.27, blue: 0.23)
-        case .compacting:       return Color(red: 0.35, green: 0.66, blue: 0.82)
-        case .justCompleted:    return Color(red: 0.30, green: 0.78, blue: 0.46)
-        case .idle:             return .clear
+        case .needsPermission:              return .red
+        case .thinking, .tool, .compacting: return .yellow
+        case .justCompleted, .idle:         return .green
         }
     }
 
     private func needsPulse(_ s: PaneAgentStatus) -> Bool {
-        // Reduce Motion: render the dot steady at full opacity — the
+        // Reduce Motion: render the light steady at full opacity — the
         // color alone carries the status.
         guard !reduceMotion else { return false }
         return s == .thinking || s == .tool || s == .needsPermission || s == .compacting
     }
 }
 
-/// A comet of accent color orbits the workspace card border to indicate
-/// indeterminate progress. Compaction passes `dual: true` so two opposing
-/// spots travel together — visually distinct from a normal thinking turn.
+/// A small accent bar breathing on the card's left edge indicates a
+/// running turn (the Linear/Arc-style side beacon) — the card border
+/// itself stays quiet while the agent works. `fast: true` (compaction)
+/// breathes noticeably quicker so it reads as a distinct, busier state.
 ///
-/// The sweep is a `CABasicAnimation` rotating a conic `CAGradientLayer`
-/// masked by the border stroke, so it plays entirely on the render
-/// server. A SwiftUI `repeatForever` rotation here is NOT offloaded to
+/// The breath is a `CABasicAnimation` looping the bar's opacity on the
+/// render server. A SwiftUI `repeatForever` here is NOT offloaded to
 /// Core Animation: the view graph re-resolves the display list every
 /// frame on the main thread (~15% CPU with one spinner), starving the
 /// main thread ghostty needs for frame presentation and tick processing.
-private struct CardBorderTraveler: NSViewRepresentable {
-    let color: Color
-    let cornerRadius: CGFloat
-    let dual: Bool
+private struct EdgeBeacon: NSViewRepresentable {
+    let color: NSColor
+    let fast: Bool
+    /// false (Reduce Motion) holds the bar steady at full strength.
+    let animates: Bool
 
-    func makeNSView(context: Context) -> CometLayerView {
-        let view = CometLayerView()
-        view.apply(color: NSColor(color), cornerRadius: cornerRadius, dual: dual)
+    func makeNSView(context: Context) -> BeaconLayerView {
+        let view = BeaconLayerView()
+        view.apply(color: color, fast: fast, animates: animates)
         return view
     }
 
-    func updateNSView(_ view: CometLayerView, context: Context) {
-        view.apply(color: NSColor(color), cornerRadius: cornerRadius, dual: dual)
+    func updateNSView(_ view: BeaconLayerView, context: Context) {
+        view.apply(color: color, fast: fast, animates: animates)
     }
 
-    final class CometLayerView: NSView {
-        private static let spinKey = "glint.comet.spin"
-        private let gradientLayer = CAGradientLayer()
+    final class BeaconLayerView: NSView {
+        private static let breathKey = "glint.beacon.breath"
+        private let bar = CALayer()
         private var color: NSColor = .clear
-        private var cornerRadius: CGFloat = 9
-        private var dual = false
+        private var fast = false
+        private var animates = true
 
         override init(frame: NSRect) {
             super.init(frame: frame)
             wantsLayer = true
-            gradientLayer.type = .conic
-            gradientLayer.startPoint = CGPoint(x: 0.5, y: 0.5)
-            gradientLayer.endPoint = CGPoint(x: 1.0, y: 0.5)
-            gradientLayer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+            bar.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+            bar.shadowOffset = .zero
         }
 
         required init?(coder: NSCoder) { fatalError("not used") }
 
-        /// The overlay spans the whole card; never swallow its clicks.
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-        func apply(color: NSColor, cornerRadius: CGFloat, dual: Bool) {
-            guard color != self.color || cornerRadius != self.cornerRadius
-                || dual != self.dual else { return }
+        func apply(color: NSColor, fast: Bool, animates: Bool) {
+            guard color != self.color || fast != self.fast
+                || animates != self.animates else { return }
             self.color = color
-            self.cornerRadius = cornerRadius
-            self.dual = dual
+            self.fast = fast
+            self.animates = animates
             configureLayers()
         }
 
@@ -980,102 +1006,101 @@ private struct CardBorderTraveler: NSViewRepresentable {
             guard let layer, bounds.width > 1, bounds.height > 1 else { return }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            if gradientLayer.superlayer !== layer {
-                layer.addSublayer(gradientLayer)
-            }
-            gradientLayer.colors = stops.map(\.0.cgColor)
-            gradientLayer.locations = stops.map { NSNumber(value: $0.1) }
-            // Square side = card diagonal, so the rotating gradient covers
-            // every corner of the mask at any angle.
-            let side = (bounds.width * bounds.width
-                + bounds.height * bounds.height).squareRoot()
-            gradientLayer.bounds = CGRect(x: 0, y: 0, width: side, height: side)
-            gradientLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
-            let mask = layer.mask as? CAShapeLayer ?? CAShapeLayer()
-            mask.frame = bounds
-            mask.path = strokeBorderPath(in: bounds, cornerRadius: cornerRadius,
-                                         lineWidth: 1.2)
-            mask.fillColor = nil
-            mask.strokeColor = NSColor.white.cgColor
-            mask.lineWidth = 1.2
-            layer.mask = mask
+            if bar.superlayer !== layer { layer.addSublayer(bar) }
+            bar.bounds = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height)
+            bar.position = CGPoint(x: bounds.midX, y: bounds.midY)
+            bar.cornerRadius = bounds.width / 2
+            bar.backgroundColor = color.cgColor
+            // The halo is the bar's own shadow, so animating the layer's
+            // opacity breathes the bar and its glow in lockstep.
+            bar.shadowColor = color.cgColor
+            bar.shadowOpacity = 0.6
+            bar.shadowRadius = 3
             CATransaction.commit()
-            ensureSpin()
-        }
 
-        private func ensureSpin() {
-            let duration: CFTimeInterval = dual ? 1.4 : 2.0
-            if let existing = gradientLayer.animation(forKey: Self.spinKey),
-               existing.duration == duration { return }
-            let spin = CABasicAnimation(keyPath: "transform.rotation.z")
-            spin.fromValue = 0
-            // Negative = clockwise on screen (macOS layers are y-up).
-            spin.toValue = -2 * Double.pi
-            spin.duration = duration
-            spin.repeatCount = .infinity
-            spin.isRemovedOnCompletion = false
-            gradientLayer.add(spin, forKey: Self.spinKey)
-        }
-
-        private var stops: [(NSColor, Double)] {
-            if dual {
-                return [
-                    (color.withAlphaComponent(0.20), 0.00),
-                    (color.withAlphaComponent(0.95), 0.10),
-                    (color.withAlphaComponent(0.20), 0.30),
-                    (color.withAlphaComponent(0.20), 0.55),
-                    (color.withAlphaComponent(0.95), 0.72),
-                    (color.withAlphaComponent(0.20), 0.88),
-                    (color.withAlphaComponent(0.20), 1.00),
-                ]
+            guard animates else {
+                bar.removeAnimation(forKey: Self.breathKey)
+                return
             }
-            return [
-                (color.withAlphaComponent(0.18), 0.00),
-                (color.withAlphaComponent(0.18), 0.55),
-                (color.withAlphaComponent(0.95), 0.72),
-                (color.withAlphaComponent(0.18), 0.88),
-                (color.withAlphaComponent(0.18), 1.00),
-            ]
+            let duration: CFTimeInterval = fast ? 1.0 : 2.2
+            if let existing = bar.animation(forKey: Self.breathKey),
+               existing.duration == duration { return }
+            let breath = CABasicAnimation(keyPath: "opacity")
+            breath.fromValue = 0.40
+            breath.toValue = 1.0
+            breath.duration = duration
+            breath.autoreverses = true
+            breath.repeatCount = .infinity
+            breath.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            breath.isRemovedOnCompletion = false
+            bar.add(breath, forKey: Self.breathKey)
         }
     }
 }
 
-/// The agent-status dot circle, with its working-state pulse running as a
-/// Core Animation scale/opacity loop on the render server.
-private struct PulsingDot: NSViewRepresentable {
-    let color: NSColor
+/// The traffic-light status pill: a dark capsule with red/yellow/green
+/// lights, the active one lit with a radial highlight + glow, the rest
+/// dimmed. The busy-state pulse runs as a Core Animation scale/opacity
+/// loop on the render server.
+private struct TrafficLightPill: NSViewRepresentable {
+    enum Light: Int {
+        case red = 0, yellow = 1, green = 2
+
+        /// (base, highlight) — macOS window-button palette.
+        var colors: (CGColor, CGColor) {
+            switch self {
+            case .red:
+                return (CGColor(red: 1.00, green: 0.37, blue: 0.34, alpha: 1),
+                        CGColor(red: 1.00, green: 0.60, blue: 0.58, alpha: 1))
+            case .yellow:
+                return (CGColor(red: 1.00, green: 0.74, blue: 0.18, alpha: 1),
+                        CGColor(red: 1.00, green: 0.87, blue: 0.54, alpha: 1))
+            case .green:
+                return (CGColor(red: 0.16, green: 0.78, blue: 0.25, alpha: 1),
+                        CGColor(red: 0.49, green: 0.91, blue: 0.57, alpha: 1))
+            }
+        }
+    }
+
+    let activeLight: Light
     let pulsing: Bool
 
-    func makeNSView(context: Context) -> DotLayerView {
-        let view = DotLayerView()
-        view.apply(color: color, pulsing: pulsing)
+    func makeNSView(context: Context) -> PillLayerView {
+        let view = PillLayerView()
+        view.apply(activeLight: activeLight, pulsing: pulsing)
         return view
     }
 
-    func updateNSView(_ view: DotLayerView, context: Context) {
-        view.apply(color: color, pulsing: pulsing)
+    func updateNSView(_ view: PillLayerView, context: Context) {
+        view.apply(activeLight: activeLight, pulsing: pulsing)
     }
 
-    final class DotLayerView: NSView {
-        private static let pulseKey = "glint.dot.pulse"
-        private let dot = CALayer()
-        private var color: NSColor = .clear
+    final class PillLayerView: NSView {
+        private static let pulseKey = "glint.trafficlight.pulse"
+        private let pill = CALayer()
+        private let gloss = CAGradientLayer()
+        private let lights = [CAGradientLayer(), CAGradientLayer(), CAGradientLayer()]
+        private var activeLight: Light = .yellow
         private var pulsing = false
 
         override init(frame: NSRect) {
             super.init(frame: frame)
             wantsLayer = true
-            dot.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-            dot.borderWidth = 1
+            for light in lights {
+                light.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+                light.type = .radial
+                light.startPoint = CGPoint(x: 0.35, y: 0.65)
+                light.endPoint = CGPoint(x: 1.0, y: 0.0)
+            }
         }
 
         required init?(coder: NSCoder) { fatalError("not used") }
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-        func apply(color: NSColor, pulsing: Bool) {
-            guard color != self.color || pulsing != self.pulsing else { return }
-            self.color = color
+        func apply(activeLight: Light, pulsing: Bool) {
+            guard activeLight != self.activeLight || pulsing != self.pulsing else { return }
+            self.activeLight = activeLight
             self.pulsing = pulsing
             configureLayers()
         }
@@ -1092,26 +1117,77 @@ private struct PulsingDot: NSViewRepresentable {
 
         private func configureLayers() {
             guard let layer, bounds.width > 1, bounds.height > 1 else { return }
+            // Gradient layers rasterize at contentsScale (default 1.0) —
+            // without matching the backing scale the lights blur on Retina.
+            let scaleFactor = window?.backingScaleFactor ?? 2
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            if dot.superlayer !== layer {
-                layer.addSublayer(dot)
+            // Near-black indigo capsule (the sidebar palette), separated
+            // from whatever it overlaps by a drop shadow instead of a
+            // solid cutout ring — adapts to icon and card alike.
+            if pill.superlayer !== layer { layer.addSublayer(pill) }
+            pill.frame = bounds
+            pill.cornerRadius = bounds.height / 2
+            pill.backgroundColor = CGColor(red: 0.055, green: 0.055, blue: 0.090, alpha: 1)
+            pill.borderColor = CGColor(gray: 1.0, alpha: 0.10)
+            pill.borderWidth = 0.5
+            pill.shadowColor = CGColor(gray: 0, alpha: 1)
+            pill.shadowOpacity = 0.55
+            pill.shadowRadius = 2.5
+            pill.shadowOffset = CGSize(width: 0, height: -0.5)
+            pill.contentsScale = scaleFactor
+            // Faint top-edge gloss so the capsule reads as a rounded body,
+            // not a flat sticker.
+            if gloss.superlayer !== layer { layer.addSublayer(gloss) }
+            gloss.frame = bounds.insetBy(dx: 0.5, dy: 0.5)
+            gloss.cornerRadius = gloss.frame.height / 2
+            gloss.colors = [CGColor(gray: 1.0, alpha: 0.07), CGColor(gray: 1.0, alpha: 0.0)]
+            gloss.startPoint = CGPoint(x: 0.5, y: 1.0)
+            gloss.endPoint = CGPoint(x: 0.5, y: 0.55)
+            gloss.contentsScale = scaleFactor
+
+            let pitch = bounds.width / 3.7
+            for (i, light) in lights.enumerated() {
+                if light.superlayer !== layer { layer.addSublayer(light) }
+                let on = i == activeLight.rawValue
+                let d: CGFloat = on ? 4.4 : 3.4
+                light.bounds = CGRect(x: 0, y: 0, width: d, height: d)
+                light.position = CGPoint(x: bounds.midX + CGFloat(i - 1) * pitch, y: bounds.midY)
+                light.cornerRadius = d / 2
+                light.contentsScale = scaleFactor
+                if on {
+                    let (base, hi) = activeLight.colors
+                    light.colors = [hi, base]
+                    light.borderColor = CGColor(gray: 1.0, alpha: 0.22)
+                    light.borderWidth = 0.5
+                    light.shadowColor = base
+                    light.shadowOpacity = 0.7
+                    light.shadowRadius = 1.6
+                    light.shadowOffset = .zero
+                } else {
+                    // Unlit sockets: visible enough that the three-light
+                    // layout reads, dim enough not to compete with the lit one.
+                    let dim = CGColor(gray: 1.0, alpha: 0.17)
+                    light.colors = [dim, dim]
+                    light.borderColor = CGColor(gray: 1.0, alpha: 0.10)
+                    light.borderWidth = 0.5
+                    light.shadowOpacity = 0
+                }
             }
-            let side = min(bounds.width, bounds.height)
-            dot.bounds = CGRect(x: 0, y: 0, width: side, height: side)
-            dot.position = CGPoint(x: bounds.midX, y: bounds.midY)
-            dot.cornerRadius = side / 2
-            dot.backgroundColor = color.cgColor
-            dot.borderColor = NSColor.black.withAlphaComponent(0.45).cgColor
             CATransaction.commit()
+
+            let active = lights[activeLight.rawValue]
+            for light in lights where light !== active {
+                light.removeAnimation(forKey: Self.pulseKey)
+            }
             if pulsing {
-                guard dot.animation(forKey: Self.pulseKey) == nil else { return }
+                guard active.animation(forKey: Self.pulseKey) == nil else { return }
                 let scale = CABasicAnimation(keyPath: "transform.scale")
                 scale.fromValue = 1.0
-                scale.toValue = 1.18
+                scale.toValue = 1.12
                 let fade = CABasicAnimation(keyPath: "opacity")
                 fade.fromValue = 1.0
-                fade.toValue = 0.75
+                fade.toValue = 0.65
                 let group = CAAnimationGroup()
                 group.animations = [scale, fade]
                 group.duration = 0.9
@@ -1119,9 +1195,9 @@ private struct PulsingDot: NSViewRepresentable {
                 group.repeatCount = .infinity
                 group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 group.isRemovedOnCompletion = false
-                dot.add(group, forKey: Self.pulseKey)
+                active.add(group, forKey: Self.pulseKey)
             } else {
-                dot.removeAnimation(forKey: Self.pulseKey)
+                active.removeAnimation(forKey: Self.pulseKey)
             }
         }
     }
@@ -1230,3 +1306,4 @@ private func strokeBorderPath(in rect: CGRect, cornerRadius: CGFloat,
     return CGPath(roundedRect: inset, cornerWidth: radius,
                   cornerHeight: radius, transform: nil)
 }
+
