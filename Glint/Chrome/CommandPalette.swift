@@ -8,6 +8,14 @@ struct CommandPalette: View {
     @State private var selectedIndex: Int = 0
     @FocusState private var queryFocused: Bool
 
+    /// Why `selectedIndex` last changed. Only keyboard navigation may
+    /// auto-scroll the selection into view: if hover-driven changes did
+    /// too, pressing ↑↓ would scroll rows under the stationary cursor,
+    /// hover would instantly re-steal the selection, and the highlight
+    /// would jump around instead of following the arrows.
+    private enum SelectionSource { case keyboard, pointer }
+    @State private var selectionSource: SelectionSource = .keyboard
+
     var body: some View {
         ZStack {
             // Click-out catcher
@@ -46,7 +54,12 @@ struct CommandPalette: View {
             .padding(.top, -80) // bias slightly above center
         }
         .onAppear { queryFocused = true }
-        .onChange(of: query) { _, _ in selectedIndex = 0 }
+        .onChange(of: query) { _, _ in
+            // Typing resets the selection to the top hit; treat it like
+            // keyboard input so the list scrolls back up with it.
+            selectionSource = .keyboard
+            selectedIndex = 0
+        }
     }
 
     // MARK: - Pieces
@@ -89,26 +102,36 @@ struct CommandPalette: View {
         let items = filteredItems()
         return ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
-                        PaletteRow(
-                            item: item,
-                            selected: idx == selectedIndex
-                        )
-                        .id(idx)
-                        .onTapGesture {
-                            selectedIndex = idx
-                            execute()
-                        }
-                        .onHover { hovering in
-                            if hovering { selectedIndex = idx }
+                if items.isEmpty {
+                    noResultsPlaceholder
+                } else {
+                    LazyVStack(spacing: 2) {
+                        ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                            PaletteRow(
+                                item: item,
+                                selected: idx == selectedIndex
+                            )
+                            .id(idx)
+                            .onTapGesture {
+                                selectedIndex = idx
+                                execute()
+                            }
+                            .onHover { hovering in
+                                if hovering {
+                                    selectionSource = .pointer
+                                    selectedIndex = idx
+                                }
+                            }
                         }
                     }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
             }
             .onChange(of: selectedIndex) { _, idx in
+                // Hover-driven selection must not auto-scroll — see
+                // `SelectionSource` for the feedback loop it causes.
+                guard selectionSource == .keyboard else { return }
                 withAnimation(.easeOut(duration: 0.1)) {
                     proxy.scrollTo(idx, anchor: .center)
                 }
@@ -116,17 +139,38 @@ struct CommandPalette: View {
         }
     }
 
+    private var noResultsPlaceholder: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Theme.text4)
+            Text("No results")
+                .font(.system(size: 12.5))
+                .foregroundStyle(Theme.text3)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 48)
+    }
+
     // MARK: - Items
 
     private func allItems() -> [PaletteItem] {
         var items: [PaletteItem] = []
 
-        // Workspace jumpers — current first so quick re-selection still works.
-        for ws in store.workspaces {
+        // Workspace jumpers — current workspace first and badged, so an
+        // accidental ⏎ on an empty query is a harmless no-op (it just
+        // re-selects the workspace you're already in).
+        let currentID = store.selectedWorkspaceID
+        let ordered = store.workspaces.filter { $0.id == currentID }
+            + store.workspaces.filter { $0.id != currentID }
+        for ws in ordered {
+            let n = ws.panes.count
+            let unit = String(localized: n == 1 ? "pane" : "panes")
             items.append(.workspace(
                 title: ws.displayName,
-                subtitle: "\(ws.panes.count) \(ws.panes.count == 1 ? "pane" : "panes")",
+                subtitle: "\(n) \(unit)",
                 accent: ws.accent,
+                isCurrent: ws.id == currentID,
                 action: { store.selectWorkspace(ws.id) }
             ))
         }
@@ -138,17 +182,21 @@ struct CommandPalette: View {
             shortcut: "",
             action: { store.addWorkspace() }
         ))
+        // Naming note: the store's `.horizontal` means an HSplit — panes
+        // side by side (see PaneTreeView) — which reads inverted as a
+        // label. User-facing copy is direction-explicit instead; the enum
+        // cases and shortcuts stay as-is (other files reference them).
         items.append(.action(
-            title: "Split Horizontal",
-            subtitle: "Stack a new pane below",
-            symbol: "rectangle.split.1x2",
+            title: "Split Right",
+            subtitle: "Open a new pane on the right",
+            symbol: "rectangle.split.2x1",
             shortcut: "⌘D",
             action: { store.splitFocused(.horizontal) }
         ))
         items.append(.action(
-            title: "Split Vertical",
-            subtitle: "Open a new pane on the right",
-            symbol: "rectangle.split.2x1",
+            title: "Split Down",
+            subtitle: "Stack a new pane below",
+            symbol: "rectangle.split.1x2",
             shortcut: "⌘⇧D",
             action: { store.splitFocused(.vertical) }
         ))
@@ -181,7 +229,18 @@ struct CommandPalette: View {
         let items = allItems()
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return items }
-        return items.filter { $0.matches(query: q) }
+        // Score, then sort best-first. Enumerate before sorting so equal
+        // scores keep their original relative order regardless of
+        // `sorted(by:)`'s stability guarantees.
+        return items.enumerated()
+            .compactMap { idx, item in
+                item.score(query: q).map { (idx: idx, item: item, score: $0) }
+            }
+            .sorted { lhs, rhs in
+                if lhs.score != rhs.score { return lhs.score > rhs.score }
+                return lhs.idx < rhs.idx
+            }
+            .map(\.item)
     }
 
     // MARK: - Behavior
@@ -189,6 +248,7 @@ struct CommandPalette: View {
     private func move(_ delta: Int) {
         let items = filteredItems()
         guard !items.isEmpty else { return }
+        selectionSource = .keyboard
         selectedIndex = (selectedIndex + delta + items.count) % items.count
     }
 
@@ -217,12 +277,19 @@ private struct PaletteRow: View {
         HStack(spacing: 12) {
             leading
             VStack(alignment: .leading, spacing: 1) {
-                Text(LocalizedStringKey(item.title))
+                // User content (workspace names) renders verbatim — through
+                // LocalizedStringKey a name like "*foo*" would be parsed as
+                // markdown and shown italicized.
+                (item.userContent
+                    ? Text(verbatim: item.title)
+                    : Text(LocalizedStringKey(item.title)))
                     .font(.system(size: 13.5, weight: selected ? .semibold : .medium))
                     .foregroundStyle(Theme.text1)
                     .lineLimit(1)
                 if let s = item.subtitle {
-                    Text(LocalizedStringKey(s))
+                    (item.userContent
+                        ? Text(verbatim: s)
+                        : Text(LocalizedStringKey(s)))
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.text4)
                         .lineLimit(1)
@@ -305,11 +372,55 @@ private struct PaletteItem: Identifiable {
     let subtitle: String?
     let icon: Icon
     let trailing: Trailing
+    /// True when title/subtitle carry runtime user data (workspace names)
+    /// rather than app copy — rows must render those verbatim, not as
+    /// LocalizedStringKey (which would markdown-format names like "*foo*").
+    let userContent: Bool
     let action: () -> Void
 
-    func matches(query: String) -> Bool {
-        title.lowercased().contains(query)
-            || (subtitle?.lowercased().contains(query) ?? false)
+    /// Fuzzy relevance of this item for `query` (already lowercased).
+    /// nil = no match. Title matches outrank any subtitle match.
+    func score(query: String) -> Int? {
+        if let t = Self.fuzzyScore(needle: query, haystack: title.lowercased()) {
+            return t + 1_000
+        }
+        if let sub = subtitle,
+           let s = Self.fuzzyScore(needle: query, haystack: sub.lowercased()) {
+            return s
+        }
+        return nil
+    }
+
+    /// Subsequence fuzzy match with a simple additive score:
+    /// exact prefix > word-boundary starts > contiguous runs > scattered
+    /// characters. Returns nil when `needle` is not a subsequence of
+    /// `haystack`. Pure; both inputs are expected pre-lowercased. Greedy
+    /// left-to-right alignment — not optimal for every pathological
+    /// input, but predictable and dependency-free.
+    static func fuzzyScore(needle: String, haystack: String) -> Int? {
+        guard !needle.isEmpty else { return 0 }
+        let n = Array(needle)
+        let h = Array(haystack)
+        var score = 0
+        var ni = 0
+        var lastMatch = -2  // sentinel: not adjacent to index 0
+        for (hi, ch) in h.enumerated() {
+            guard ni < n.count, ch == n[ni] else { continue }
+            if hi == 0 {
+                score += 20                                    // start of string
+            } else if hi == lastMatch + 1 {
+                score += 10                                    // contiguous run
+            } else if !h[hi - 1].isLetter && !h[hi - 1].isNumber {
+                score += 15                                    // word boundary
+            } else {
+                score += 1                                     // scattered
+            }
+            lastMatch = hi
+            ni += 1
+        }
+        guard ni == n.count else { return nil }                // not a subsequence
+        if haystack.hasPrefix(needle) { score += 100 }         // prefix beats all
+        return score
     }
 
     static func action(title: String, subtitle: String, symbol: String,
@@ -317,14 +428,17 @@ private struct PaletteItem: Identifiable {
         PaletteItem(title: title, subtitle: subtitle,
                     icon: .symbol(symbol, Theme.accentBright),
                     trailing: shortcut.isEmpty ? .kind("ACTION") : .kbd(shortcut),
+                    userContent: false,
                     action: action)
     }
 
     static func workspace(title: String, subtitle: String, accent: Color,
+                          isCurrent: Bool,
                           action: @escaping () -> Void) -> PaletteItem {
         PaletteItem(title: title, subtitle: subtitle,
                     icon: .swatch(accent),
-                    trailing: .kind("WORKSPACE"),
+                    trailing: .kind(isCurrent ? "CURRENT" : "WORKSPACE"),
+                    userContent: true,
                     action: action)
     }
 }
