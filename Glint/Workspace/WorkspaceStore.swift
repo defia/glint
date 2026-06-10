@@ -325,6 +325,32 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(sortCompletedFirst, forKey: "glint.sortCompletedFirst") }
     }
 
+    /// Install both agents' hooks on the very first launch so status
+    /// tracking works out of the box — but exactly once per agent. If the
+    /// user later uninstalls (via Settings or by editing the agent's
+    /// config themselves), launches never silently re-add the entries;
+    /// the Settings → Install button is the only way back in.
+    ///
+    /// For agents that remain installed, the shared reporter script is
+    /// still refreshed every launch — script-body updates shipped with
+    /// new Glint versions must propagate even though the settings merge
+    /// is skipped.
+    private static func autoInstallAgentHooksOnFirstLaunch(socketPath: String) {
+        let defaults = UserDefaults.standard
+        if !defaults.bool(forKey: "glint.claudeHooksAutoInstalled") {
+            AgentHookInstaller.installIfNeeded(socketPath: socketPath)
+            defaults.set(true, forKey: "glint.claudeHooksAutoInstalled")
+        } else if AgentHookInstaller.isInstalled() {
+            _ = AgentHookInstaller.ensureReporterScript()
+        }
+        if !defaults.bool(forKey: "glint.codexHooksAutoInstalled") {
+            CodexHookInstaller.installIfNeeded(socketPath: socketPath)
+            defaults.set(true, forKey: "glint.codexHooksAutoInstalled")
+        } else if CodexHookInstaller.isInstalled() {
+            _ = AgentHookInstaller.ensureReporterScript()
+        }
+    }
+
     /// Re-run the hook installer and refresh `claudeHooksInstalled`.
     func installClaudeHooks() {
         AgentHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
@@ -413,7 +439,7 @@ final class WorkspaceStore: ObservableObject {
 
         // Boot the CLI-agent IPC channel and route hook events into pane state.
         AgentBridge.shared.start()
-        AgentHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
+        Self.autoInstallAgentHooksOnFirstLaunch(socketPath: AgentBridge.shared.socketPath)
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
         NotificationCenter.default.addObserver(
@@ -481,6 +507,28 @@ final class WorkspaceStore: ObservableObject {
                 NSLog("[glint] pane process changed: ws=\(k.workspace.uuidString.prefix(8)) pane=\(k.pane.value) -> \(v)")
             }
             paneProcesses = newProcesses
+        }
+
+        // Reconcile stale hook state. Hooks are the only writer of
+        // paneAgentState and no hook fires when an agent quits, so after
+        // e.g. claude → exit → codex the pane keeps kind == .claude and
+        // iconKind (which prefers hook state over pid polling) never
+        // flips. Claude masks this by emitting SessionStart on launch;
+        // codex sends nothing until its first turn ends. When the poller
+        // sees a pane actually running a *different* known agent, hand
+        // the state over to it.
+        for (key, name) in newProcesses {
+            guard var state = paneAgentState[key] else { continue }
+            let runningKind: PaneAgentKind? =
+                name.contains("claude") ? .claude :
+                name.contains("codex") ? .codex : nil
+            if let runningKind, runningKind != state.kind {
+                state.kind = runningKind
+                state.status = .idle
+                state.detail = nil
+                state.updatedAt = Date()
+                paneAgentState[key] = state
+            }
         }
     }
 
@@ -869,17 +917,20 @@ extension WorkspaceStore {
         return best
     }
 
-    private func mergeStatus(_ a: PaneAgentStatus?, _ b: PaneAgentStatus) -> PaneAgentStatus {
-        func rank(_ s: PaneAgentStatus) -> Int {
-            switch s {
-            case .needsPermission: return 5
-            case .compacting:      return 3
-            case .tool:            return 3
-            case .thinking:        return 3
-            case .justCompleted:   return 2
-            case .idle:            return 1
-            }
+    /// Attention ranking shared by the status merge and the icon pick.
+    private func statusRank(_ s: PaneAgentStatus) -> Int {
+        switch s {
+        case .needsPermission: return 5
+        case .compacting:      return 3
+        case .tool:            return 3
+        case .thinking:        return 3
+        case .justCompleted:   return 2
+        case .idle:            return 1
         }
+    }
+
+    private func mergeStatus(_ a: PaneAgentStatus?, _ b: PaneAgentStatus) -> PaneAgentStatus {
+        let rank = statusRank
         guard let a else { return b }
         return rank(b) > rank(a) ? b : a
     }
@@ -888,14 +939,23 @@ extension WorkspaceStore {
     /// panes are currently running. AI / SSH / dev tools beat plain shell.
     func iconKind(for workspace: Workspace) -> WorkspaceIconKind {
         // Agent push-state wins over pid polling — if any pane reported a
-        // claude/codex hook in this workspace, surface that.
+        // claude/codex hook in this workspace, surface that. With several
+        // agent panes (e.g. claude + codex side by side) the busy one wins;
+        // when all are equally busy/idle, the most recently active wins.
+        // `panes` is a Dictionary, so without this ordering the icon would
+        // be hash-order roulette.
+        var bestAgent: PaneAgentState?
         for paneID in workspace.panes.keys {
             let key = WorkspacePaneKey(workspace: workspace.id, pane: paneID)
-            switch paneAgentState[key]?.kind {
-            case .claude: return .claude
-            case .codex:  return .codex
-            case .none:   continue
+            guard let entry = paneAgentState[key] else { continue }
+            guard let cur = bestAgent else { bestAgent = entry; continue }
+            let (curRank, newRank) = (statusRank(cur.status), statusRank(entry.status))
+            if newRank > curRank || (newRank == curRank && entry.updatedAt > cur.updatedAt) {
+                bestAgent = entry
             }
+        }
+        if let bestAgent {
+            return bestAgent.kind == .codex ? .codex : .claude
         }
 
         let names = workspace.panes.keys.compactMap {
