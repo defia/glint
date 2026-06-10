@@ -89,6 +89,29 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
                 object: win
             )
         }
+
+        // Occlusion: ghostty stops a surface's display link while it's not
+        // visible (renderer.setVisible). Without this push, every surface
+        // detached from the window — i.e. all panes of every non-selected
+        // workspace, which the store keeps alive on purpose — keeps its
+        // render loop running forever (cursor blink redraws etc.). Window-
+        // level occlusion (minimized, fully covered) is pushed too, same as
+        // upstream's windowDidChangeOcclusionState.
+        NotificationCenter.default.removeObserver(
+            self,
+            name: NSWindow.didChangeOcclusionStateNotification,
+            object: nil
+        )
+        if let win = window {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(windowDidChangeOcclusionState(_:)),
+                name: NSWindow.didChangeOcclusionStateNotification,
+                object: win
+            )
+        }
+        pushOcclusionToGhostty()
+
         guard window != nil, surface == nil else {
             pushDisplayIDToGhostty()
             return
@@ -101,6 +124,8 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // be the one our window is on (multi-monitor setups, secondary
         // ProMotion display, etc.).
         pushDisplayIDToGhostty()
+        // The surface didn't exist for the push above; mark it visible now.
+        pushOcclusionToGhostty()
     }
 
     @objc private func windowDidChangeScreen(_ note: Notification) {
@@ -109,6 +134,16 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // mixed-DPI external monitors); re-push so ghostty re-rasterises
         // glyphs at the right scale.
         viewDidChangeBackingProperties()
+    }
+
+    @objc private func windowDidChangeOcclusionState(_ note: Notification) {
+        pushOcclusionToGhostty()
+    }
+
+    private func pushOcclusionToGhostty() {
+        guard let s = surface else { return }
+        let visible = window?.occlusionState.contains(.visible) ?? false
+        ghostty_surface_set_occlusion(s, visible)
     }
 
     private func pushDisplayIDToGhostty() {
@@ -121,8 +156,16 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     }
 
     private func createSurface() {
+        // Memory-profiling escape hatch: launch with GLINT_NO_SURFACE=1 to
+        // measure the app's footprint without any ghostty renderer.
+        if ProcessInfo.processInfo.environment["GLINT_NO_SURFACE"] != nil {
+            NSLog("GhosttySurfaceView: GLINT_NO_SURFACE set, skipping surface creation")
+            showSurfaceCreationError()
+            return
+        }
         guard let app = GhosttyManager.shared.app else {
             NSLog("GhosttySurfaceView: ghostty app not ready")
+            showSurfaceCreationError()
             return
         }
 
@@ -163,15 +206,71 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         }
         guard let s else {
             NSLog("ghostty_surface_new returned nil")
+            showSurfaceCreationError()
             return
         }
         self.surface = s
+        removeSurfaceCreationError()
 
         // Route the initial size through the same CATransaction path the
         // resize hooks use, so frame 0 already has drawableSize aligned
         // with view bounds — no first-paint stretch from the layer's
         // default 0×0 drawable.
         syncSurfaceSize(pointsSize: bounds.size)
+    }
+
+    // MARK: - surface creation failure UI
+
+    /// Centered "Terminal failed to start" + Retry, shown when ghostty
+    /// isn't ready or `ghostty_surface_new` fails. Without it the pane is
+    /// just a dead dark rectangle and the only evidence is an NSLog line.
+    /// Plain AppKit (no SwiftUI hosting) because this view is below the
+    /// SwiftUI layer; colors mirror Theme.text1/text2 — the app is
+    /// dark-mode-only so hardcoding the dark values is safe.
+    private var surfaceErrorStack: NSStackView?
+
+    private func showSurfaceCreationError() {
+        guard surfaceErrorStack == nil else { return }
+
+        let label = NSTextField(labelWithString: String(localized: "Terminal failed to start"))
+        label.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        label.textColor = NSColor(red: 0.925, green: 0.929, blue: 0.949, alpha: 1.0) // Theme.text1
+        label.alignment = .center
+
+        let retry = NSButton(title: String(localized: "Retry"),
+                             target: self,
+                             action: #selector(retrySurfaceCreation(_:)))
+        retry.bezelStyle = .rounded
+        retry.controlSize = .regular
+
+        let stack = NSStackView(views: [label, retry])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 10
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        surfaceErrorStack = stack
+    }
+
+    private func removeSurfaceCreationError() {
+        surfaceErrorStack?.removeFromSuperview()
+        surfaceErrorStack = nil
+    }
+
+    @objc private func retrySurfaceCreation(_ sender: Any?) {
+        guard surface == nil else { return }
+        // createSurface removes the placeholder itself on success.
+        createSurface()
+        guard surface != nil else { return }  // still failing — keep the placeholder
+        // Same post-creation steps viewDidMoveToWindow performs on the
+        // happy path: lock CVDisplayLink to the right display and hand
+        // keyboard focus to the freshly created surface.
+        pushDisplayIDToGhostty()
+        window?.makeFirstResponder(self)
     }
 
     /// Best-effort current cwd: prefers the cached value pushed via ghostty's
@@ -394,6 +493,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
                 name: .glintPaneEscPressed, object: nil, userInfo: ["pane": pk])
         }
         let hasBindingMod = mods.contains(.control) || mods.contains(.command)
+            || optionActsAsMeta(mods, surface: s)
         if hasBindingMod || Self.isSpecialKey(event.keyCode) {
             // Bindings + special keys (arrows, Return, Backspace, etc.) go
             // through ghostty so it can map them to escape sequences.
@@ -406,6 +506,33 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             // a white-background "marked text" until the user moves the cursor.
             interpretKeyEvents([event])
         }
+    }
+
+    /// Whether an Option-modified press should be routed through ghostty
+    /// (option-as-meta: readline ⌥B/⌥F/⌥D, claude code's ⌥↵, …) instead of
+    /// the macOS text-input pipeline. Without this, ⌥B falls through to
+    /// `interpretKeyEvents` → `insertText("∫")` and ghostty never sees the
+    /// event, so `macos-option-as-alt` is dead config.
+    ///
+    /// We can't decide this ourselves: on many European layouts Option is
+    /// how users type legitimate characters (@, [, {, …) and dead keys, so
+    /// hijacking it unconditionally breaks text entry. Ghostty already owns
+    /// the decision — `ghostty_surface_key_translation_mods` applies
+    /// `macos-option-as-alt` (with per-layout auto-detection when unset,
+    /// see embedded.zig) and strips Option from the mods that should be
+    /// used for *character translation*. If Option survives translation,
+    /// the press is character input and must keep flowing through
+    /// `interpretKeyEvents` (dead keys, IME); if it's stripped, Option is a
+    /// Meta modifier and the event belongs to ghostty, which then does its
+    /// own keymap translation + ESC-prefix encoding via `ghostty_surface_key`.
+    private func optionActsAsMeta(_ mods: NSEvent.ModifierFlags,
+                                  surface s: ghostty_surface_t) -> Bool {
+        guard mods.contains(.option) else { return false }
+        // Mid-IME composition (e.g. Japanese henkan) — never steal keys
+        // from the input method while marked text is active.
+        if hasMarkedText() { return false }
+        let translated = ghostty_surface_key_translation_mods(s, currentMods(mods))
+        return translated.rawValue & GHOSTTY_MODS_ALT.rawValue == 0
     }
 
     private static func isSpecialKey(_ keycode: UInt16) -> Bool {
@@ -472,17 +599,35 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     // MARK: - mouse
 
+    /// True while we're swallowing the click that focused this pane.
+    /// The first click on an unfocused pane is a focus gesture, not
+    /// terminal input — forwarding it would hand mouse-mode TUIs (vim,
+    /// htop, claude) a stray click at wherever the cursor happened to be.
+    /// We swallow the whole press session (down + drags + up) so ghostty
+    /// never sees an unmatched release; the flag clears on mouseUp and
+    /// every subsequent click behaves normally.
+    private var swallowingFocusClick = false
+
     override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
+        if window?.firstResponder !== self {
+            window?.makeFirstResponder(self)
+            swallowingFocusClick = true
+            return
+        }
         forwardMousePos(event)
         forwardMouseButton(event, state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if swallowingFocusClick { return }
         forwardMousePos(event)
     }
 
     override func mouseUp(with event: NSEvent) {
+        if swallowingFocusClick {
+            swallowingFocusClick = false
+            return
+        }
         forwardMousePos(event)
         forwardMouseButton(event, state: GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT)
     }
@@ -629,6 +774,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             return false
         }
         let joined = urls.map { shellQuote($0.path) }.joined(separator: " ")
+        // shellQuote keeps quoting intact, but a filename can legally embed
+        // a newline — gate on the actual injected string, same as paste.
+        guard confirmUnsafeTextInjection(joined) else { return false }
         joined.withCString { ptr in
             ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
         }
@@ -690,9 +838,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         m.addItem(withTitle: String(localized: "Select All"),
                   action: #selector(menuSelectAll(_:)),
                   keyEquivalent: "a").target = self
+        // No key equivalent: ⌘K is bound to the command palette app-wide,
+        // so advertising it here would lie about what the shortcut does.
         m.addItem(withTitle: String(localized: "Clear"),
                   action: #selector(menuClear(_:)),
-                  keyEquivalent: "k").target = self
+                  keyEquivalent: "").target = self
         return m
     }
 
@@ -718,9 +868,42 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     private func pasteClipboardText(into s: ghostty_surface_t) {
         guard let str = NSPasteboard.general.string(forType: .string),
               !str.isEmpty else { return }
+        guard confirmUnsafeTextInjection(str) else { return }
         str.withCString { ptr in
             ghostty_surface_text(s, ptr, UInt(strlen(ptr)))
         }
+    }
+
+    /// True when `text` contains bytes a shell could act on immediately:
+    /// newlines (\n / \r — most shells and REPLs execute on CR even inside
+    /// bracketed paste when the running program doesn't support it) or C0
+    /// control characters other than tab (ESC can rewrite the line, ^C can
+    /// kill the foreground job, etc.).
+    private func injectedTextLooksUnsafe(_ text: String) -> Bool {
+        for scalar in text.unicodeScalars {
+            let v = scalar.value
+            if v == 0x09 { continue }                 // tab is fine
+            if v < 0x20 || v == 0x7F { return true }  // C0 controls + DEL (covers \n, \r)
+        }
+        return false
+    }
+
+    /// Confirmation gate shared by every path that injects outside text
+    /// into the pty (clipboard paste, file drag-drop). Returns true when
+    /// injection should proceed. Safe text passes silently; risky text
+    /// (see `injectedTextLooksUnsafe`) asks first, because a multi-line
+    /// paste into a shell prompt executes each line as a command.
+    private func confirmUnsafeTextInjection(_ text: String) -> Bool {
+        guard injectedTextLooksUnsafe(text) else { return true }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: "Paste potentially unsafe text?")
+        alert.informativeText = String(
+            localized: "The text contains newlines or control characters, which may execute commands immediately."
+        )
+        alert.addButton(withTitle: String(localized: "Paste"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// True when the pasteboard holds image bytes worth re-routing through
