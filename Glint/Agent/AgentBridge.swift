@@ -134,4 +134,9 @@ final class AgentBridge {
 
 extension Notification.Name {
     static let glintAgentEvent = Notification.Name("glint.agent.event")
+    /// Posted by GhosttySurfaceView when the user hits plain Esc in a
+    /// pane. userInfo: ["pane": "<workspaceUUID>:<paneID>"]. Used to
+    /// optimistically clear a busy agent status — no CLI agent emits a
+    /// hook on user interrupt.
+    static let glintPaneEscPressed = Notification.Name("glint.pane.escPressed")
 }

@@ -407,6 +407,19 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             }
             return
         }
+        // Plain Esc: neither claude nor codex emit any hook when the user
+        // interrupts a turn (Stop explicitly skips interrupts), so the
+        // sidebar would show "thinking" forever. The wrapper does see the
+        // keypress — tell the store so it can optimistically flip the
+        // pane's agent state back to idle. If the agent wasn't actually
+        // interrupted, its next hook event restores the busy status. The
+        // event still flows through to ghostty below.
+        if event.keyCode == 53,
+           mods.intersection([.command, .option, .control, .shift]).isEmpty,
+           let pk = paneKey {
+            NotificationCenter.default.post(
+                name: .glintPaneEscPressed, object: nil, userInfo: ["pane": pk])
+        }
         let hasBindingMod = mods.contains(.control) || mods.contains(.command)
         if hasBindingMod || Self.isSpecialKey(event.keyCode) {
             // Bindings + special keys (arrows, Return, Backspace, etc.) go

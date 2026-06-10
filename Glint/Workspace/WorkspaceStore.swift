@@ -423,6 +423,13 @@ final class WorkspaceStore: ObservableObject {
         ) { [weak self] note in
             Task { @MainActor in self?.handleAgentEvent(note.userInfo) }
         }
+        NotificationCenter.default.addObserver(
+            forName: .glintPaneEscPressed,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            Task { @MainActor in self?.handlePaneEsc(note.userInfo) }
+        }
     }
 
     deinit {
@@ -538,6 +545,29 @@ final class WorkspaceStore: ObservableObject {
             default:
                 break
             }
+        }
+    }
+
+    /// User pressed plain Esc in a pane whose agent is mid-turn. Neither
+    /// claude nor codex emit any hook on user interrupt (`Stop` explicitly
+    /// does not fire for interrupts), so this keypress is the only signal
+    /// we get — optimistically flip busy → idle. False positives are
+    /// self-correcting: if the agent is still working, its next hook
+    /// event (PreToolUse/PostToolUse/…) restores the busy status.
+    func handlePaneEsc(_ info: [AnyHashable: Any]?) {
+        guard let info,
+              let paneStr = info["pane"] as? String,
+              let key = Self.parsePaneKey(paneStr),
+              var state = paneAgentState[key] else { return }
+        switch state.status {
+        case .thinking, .tool, .compacting, .needsPermission:
+            state.status = .idle
+            state.updatedAt = Date()
+            paneAgentState[key] = state
+        case .idle, .justCompleted:
+            // justCompleted is an unread badge — only viewing the
+            // workspace clears it, not a stray Esc.
+            break
         }
     }
 
