@@ -56,8 +56,12 @@ echo "  size:   $SIZE"
 echo "  sha256: $SHA256"
 
 echo "Creating release $TAG on $REPO"
+# --prerelease keeps build-artifact releases away from the repo's
+# "Latest" slot — that belongs to the newest vX.Y.Z app release (the
+# cask's livecheck `:github_latest` reads it, and so do visitors).
 gh release create "$TAG" \
   --repo "$REPO" \
+  --prerelease \
   --title "GhosttyKit prebuilt — ghostty $SHORT_SHA (v$N)" \
   --notes "Prebuilt GhosttyKit.xcframework for ghostty $GHOSTTY_SHA.
 
