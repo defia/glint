@@ -37,4 +37,5 @@ sparkle_priv.key
 
 # Design exploration sandbox — local-only mockups, not part of the repo
 design/
+_design/
 .codegraph/
