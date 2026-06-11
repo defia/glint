@@ -68,6 +68,11 @@ struct Workspace: Identifiable, Codable {
     /// Hex string like "5E5CE6" for Codable simplicity.
     var accentHex: String
     var symbol: String
+    /// Last-known agent identity ("claude"/"codex") for this workspace, so its
+    /// icon survives a restart before any process re-reports. Only the *kind*
+    /// is persisted — the live agent *status* (thinking/needsPermission/…) is
+    /// runtime-only and intentionally not saved. See `iconKind(for:)`.
+    var iconHint: String?
     var root: SplitNode
     var panes: [PaneID: Pane]
     var focusedPane: PaneID
@@ -78,16 +83,18 @@ struct Workspace: Identifiable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, userNamed, accentHex, symbol, root, panes, focusedPane, nextPaneSeq
+        case id, name, userNamed, accentHex, symbol, iconHint, root, panes, focusedPane, nextPaneSeq
     }
 
     init(id: UUID, name: String, userNamed: Bool, accentHex: String, symbol: String,
-         root: SplitNode, panes: [PaneID: Pane], focusedPane: PaneID, nextPaneSeq: UInt32) {
+         root: SplitNode, panes: [PaneID: Pane], focusedPane: PaneID, nextPaneSeq: UInt32,
+         iconHint: String? = nil) {
         self.id = id
         self.name = name
         self.userNamed = userNamed
         self.accentHex = accentHex
         self.symbol = symbol
+        self.iconHint = iconHint
         self.root = root
         self.panes = panes
         self.focusedPane = focusedPane
@@ -103,6 +110,9 @@ struct Workspace: Identifiable, Codable {
         self.userNamed = (try? c.decode(Bool.self, forKey: .userNamed)) ?? true
         self.accentHex = try c.decode(String.self, forKey: .accentHex)
         self.symbol = try c.decode(String.self, forKey: .symbol)
+        // Older saves predate the persisted icon hint — fine, it stays nil and
+        // the icon is derived live until an agent reports.
+        self.iconHint = try c.decodeIfPresent(String.self, forKey: .iconHint)
         self.root = try c.decode(SplitNode.self, forKey: .root)
         self.panes = try c.decode([PaneID: Pane].self, forKey: .panes)
         self.focusedPane = try c.decode(PaneID.self, forKey: .focusedPane)
@@ -330,6 +340,13 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreLastWorkspace, forKey: "glint.restoreLastWorkspace") }
     }
 
+    /// Replay each pane's last-session terminal output (colors intact) into the
+    /// new shell on launch. Records the raw PTY stream into a small fixed ring
+    /// per pane; off = no recording installed at all. Defaults to on.
+    @Published var restoreTerminalScrollback: Bool = (UserDefaults.standard.object(forKey: "glint.restoreTerminalScrollback") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(restoreTerminalScrollback, forKey: "glint.restoreTerminalScrollback") }
+    }
+
     /// Play a chime when the focused pane in a background workspace flips
     /// to `.needsPermission`. Background-only so the chime doesn't fire on
     /// the workspace the user is already watching. Defaults to on.
@@ -342,6 +359,13 @@ final class WorkspaceStore: ObservableObject {
     /// Defaults to on.
     @Published var soundOnTurnComplete: Bool = (UserDefaults.standard.object(forKey: "glint.soundOnTurnComplete") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(soundOnTurnComplete, forKey: "glint.soundOnTurnComplete") }
+    }
+
+    /// Play an error tone when a background workspace's agent turn ends in an
+    /// API/transport error (transitions into `.failed`). Same background-only
+    /// rule as the other cues. Defaults to on.
+    @Published var soundOnError: Bool = (UserDefaults.standard.object(forKey: "glint.soundOnError") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(soundOnError, forKey: "glint.soundOnError") }
     }
 
     /// Float workspaces whose agents just finished a turn (`.justCompleted`)
@@ -439,6 +463,8 @@ final class WorkspaceStore: ObservableObject {
 
     private var saveCancellable: AnyCancellable?
     private var cwdTimer: Timer?
+    /// Counts 1s cwd ticks so scrollback flushes run at ~5s, not every second.
+    private var scrollbackFlushTick = 0
     private var observerTokens: [NSObjectProtocol] = []
 
     /// The app's single live store. AppDelegate consults it for the quit
@@ -465,8 +491,31 @@ final class WorkspaceStore: ObservableObject {
         // recent dirs persisted. The closure captures self weakly so the
         // repeating timer doesn't retain the store forever.
         cwdTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.captureCwdsFromLiveSurfaces() }
+            Task { @MainActor in
+                guard let self else { return }
+                self.captureCwdsFromLiveSurfaces()
+                // Capture the live agent identity so the icon persists across a
+                // restart (writes only when it actually changes).
+                self.syncIconHints()
+                // Snapshot terminal scrollback to disk roughly every 5s (off
+                // the IO/main hot path; skips panes with no new output).
+                self.scrollbackFlushTick += 1
+                if self.scrollbackFlushTick >= 5 {
+                    self.scrollbackFlushTick = 0
+                    self.flushScrollback()
+                }
+            }
         }
+
+        // Drop scrollback snapshots for panes that no longer exist.
+        var liveScrollbackIDs = Set<String>()
+        for ws in workspaces {
+            for paneID in ws.panes.keys {
+                liveScrollbackIDs.insert(
+                    ScrollbackArchive.fileID(forPaneKey: "\(ws.id.uuidString):\(paneID.value)"))
+            }
+        }
+        ScrollbackArchive.prune(keeping: liveScrollbackIDs)
 
         // Block-based observers hold their tokens in `observerTokens`; the
         // store currently lives as long as the app, but if it's ever torn
@@ -480,6 +529,8 @@ final class WorkspaceStore: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.captureCwdsFromLiveSurfaces()
+                self?.syncIconHints()
+                self?.flushScrollback()
                 self?.persist()
             }
         })
@@ -561,6 +612,13 @@ final class WorkspaceStore: ObservableObject {
     /// refresh the per-pane foreground process name. Called periodically, on
     /// app exit, and whenever ghostty pushes a PWD update via its action
     /// callback.
+    /// Persist every live pane's recorded terminal output. No-op when the
+    /// feature is off. Each view only writes when it has new bytes.
+    func flushScrollback() {
+        guard restoreTerminalScrollback else { return }
+        for view in surfaceViews.values { view.flushScrollbackToDisk() }
+    }
+
     func captureCwdsFromLiveSurfaces() {
         var newProcesses: [WorkspacePaneKey: String] = [:]
         for i in workspaces.indices {
@@ -667,7 +725,30 @@ final class WorkspaceStore: ObservableObject {
             } else {
                 state.status = .justCompleted
             }
+        case "StopFailure":
+            // The turn died on an API/transport error (socket closed, rate-
+            // limit, auth, overload). Claude fires StopFailure instead of Stop,
+            // so this is the only end-of-turn signal we get — without it the
+            // pane stays stuck on `.thinking`. Surface a sticky error badge,
+            // cleared when the user views the workspace (like justCompleted).
+            // Always set it, even if the user is watching: an error is worth a
+            // beat of red rather than silently snapping to idle.
+            state.status = .failed
         default: break
+        }
+        // Anchor the turn clock at the start of active work, then keep it
+        // through intermediate tool/thinking transitions — so the sidebar shows
+        // total turn time, not per-step time. Two events (re)set it:
+        //   • non-busy → busy: a fresh turn begins (UserPromptSubmit: idle → thinking)
+        //   • leaving needsPermission back into work: the user just approved, so
+        //     restart the clock — the (possibly long) approval wait shouldn't
+        //     count toward the post-approval work time.
+        let nowBusy = Self.isBusyStatus(state.status)
+        let startsTurn = nowBusy && !Self.isBusyStatus(oldStatus)
+        let resumesAfterApproval = nowBusy
+            && oldStatus == .needsPermission && state.status != .needsPermission
+        if startsTurn || resumesAfterApproval {
+            state.turnStartedAt = now
         }
         state.updatedAt = now
         paneAgentState[key] = state
@@ -683,6 +764,8 @@ final class WorkspaceStore: ObservableObject {
                 NSSound(named: "Funk")?.play()
             case .justCompleted where soundOnTurnComplete:
                 NSSound(named: "Glass")?.play()
+            case .failed where soundOnError:
+                NSSound(named: "Basso")?.play()
             default:
                 break
             }
@@ -705,18 +788,19 @@ final class WorkspaceStore: ObservableObject {
             state.status = .idle
             state.updatedAt = Date()
             paneAgentState[key] = state
-        case .idle, .justCompleted:
-            // justCompleted is an unread badge — only viewing the
-            // workspace clears it, not a stray Esc.
+        case .idle, .justCompleted, .failed:
+            // justCompleted/failed are unread badges — only viewing the
+            // workspace clears them, not a stray Esc.
             break
         }
     }
 
-    /// Clear any `.justCompleted` panes in `workspaceID` back to `.idle`.
-    /// Called whenever the user selects a workspace — that act is treated
-    /// as "I saw it finished".
+    /// Clear any `.justCompleted` / `.failed` panes in `workspaceID` back to
+    /// `.idle`. Called whenever the user selects a workspace — that act is
+    /// treated as "I saw it finished / saw it errored".
     func acknowledgeCompletionIfNeeded(for workspaceID: UUID) {
-        for (key, state) in paneAgentState where key.workspace == workspaceID && state.status == .justCompleted {
+        for (key, state) in paneAgentState
+        where key.workspace == workspaceID && (state.status == .justCompleted || state.status == .failed) {
             paneAgentState[key]?.status = .idle
             paneAgentState[key]?.updatedAt = Date()
         }
@@ -866,6 +950,9 @@ final class WorkspaceStore: ObservableObject {
         if let newRoot { workspaces[i].root = newRoot }
         workspaces[i].panes.removeValue(forKey: target)
         surfaceViews.removeValue(forKey: key)
+        // The pane is gone for good — drop its scrollback snapshot too.
+        ScrollbackArchive.delete(
+            id: ScrollbackArchive.fileID(forPaneKey: "\(workspaces[i].id.uuidString):\(target.value)"))
         // Drop the non-persistent side state too, or closed panes linger as
         // ghost entries forever.
         paneAgentState.removeValue(forKey: key)
@@ -956,6 +1043,11 @@ final class WorkspaceStore: ObservableObject {
         // Drop every surface tied to this workspace (their ghostty surfaces
         // get freed in GhosttySurfaceView.deinit when the dict releases them).
         surfaceViews = surfaceViews.filter { $0.key.workspace != id }
+        // And their scrollback snapshots.
+        for paneID in workspaces[idx].panes.keys {
+            ScrollbackArchive.delete(
+                id: ScrollbackArchive.fileID(forPaneKey: "\(id.uuidString):\(paneID.value)"))
+        }
         paneAgentState = paneAgentState.filter { $0.key.workspace != id }
         paneProcesses = paneProcesses.filter { $0.key.workspace != id }
 
@@ -1113,6 +1205,25 @@ enum WorkspaceIconKind {
             return ""
         }
     }
+
+    /// Stable token for the kinds worth persisting as a workspace's identity —
+    /// the AI agents. Transient process/tool kinds (ssh/vim/python/git/…) return
+    /// nil: they're re-derived live each session and shouldn't stick forever.
+    var persistToken: String? {
+        switch self {
+        case .claude: return "claude"
+        case .codex:  return "codex"
+        default:      return nil
+        }
+    }
+
+    static func fromPersistToken(_ token: String) -> WorkspaceIconKind? {
+        switch token {
+        case "claude": return .claude
+        case "codex":  return .codex
+        default:       return nil
+        }
+    }
 }
 
 extension WorkspaceStore {
@@ -1129,21 +1240,34 @@ extension WorkspaceStore {
         for paneID in workspace.panes.keys {
             let key = WorkspacePaneKey(workspace: workspace.id, pane: paneID)
             guard let entry = paneAgentState[key] else { continue }
+            // `since` is the turn start (not last status change) so the sidebar
+            // timer shows total turn elapsed time, not per-tool-call time.
             if let cur = best {
                 let merged = mergeStatus(cur.0, entry.status)
                 // Take the timestamp from whichever side won the merge.
-                best = (merged, merged == cur.0 ? cur.1 : entry.updatedAt)
+                best = (merged, merged == cur.0 ? cur.1 : entry.turnStartedAt)
             } else {
-                best = (entry.status, entry.updatedAt)
+                best = (entry.status, entry.turnStartedAt)
             }
         }
         return best
+    }
+
+    /// A turn is actively running in these states — used to anchor the turn
+    /// clock (set on the first non-busy → busy transition, kept through the
+    /// turn). `.justCompleted`/`.failed`/`.idle` are turn-end / no-turn.
+    static func isBusyStatus(_ s: PaneAgentStatus) -> Bool {
+        switch s {
+        case .thinking, .tool, .compacting, .needsPermission: return true
+        case .justCompleted, .failed, .idle:                  return false
+        }
     }
 
     /// Attention ranking shared by the status merge and the icon pick.
     private func statusRank(_ s: PaneAgentStatus) -> Int {
         switch s {
         case .needsPermission: return 5
+        case .failed:          return 4
         case .compacting:      return 3
         case .tool:            return 3
         case .thinking:        return 3
@@ -1158,9 +1282,44 @@ extension WorkspaceStore {
         return rank(b) > rank(a) ? b : a
     }
 
+    /// Icon to display for a workspace. Prefers what's running live; after a
+    /// restart (no process has reported yet → live falls back to `.shell`) it
+    /// restores the persisted agent identity so the workspace keeps its icon.
+    /// A live agent/process always wins over the saved hint.
+    func iconKind(for workspace: Workspace) -> WorkspaceIconKind {
+        let live = liveIconKind(for: workspace)
+        if case .shell = live,
+           let hint = workspace.iconHint,
+           let restored = WorkspaceIconKind.fromPersistToken(hint) {
+            return restored
+        }
+        return live
+    }
+
+    /// Persist each workspace's live agent identity (claude/codex) into its
+    /// `iconHint` so the icon survives a restart. Writes only on change to
+    /// avoid autosave churn; never clears a hint (a workspace that drops back
+    /// to a bare shell keeps its last agent icon). Status is never touched.
+    func syncIconHints() {
+        var changed = false
+        for i in workspaces.indices {
+            guard let token = liveIconKind(for: workspaces[i]).persistToken else { continue }
+            if workspaces[i].iconHint != token {
+                workspaces[i].iconHint = token
+                changed = true
+            }
+        }
+        // Flush immediately rather than waiting on the 0.5s autosave debounce:
+        // an agent appearing is a rare event, and a hard kill (dev `pkill -9`,
+        // crash) inside the debounce window would otherwise lose the hint, so
+        // the icon wouldn't restore. Cheap because `changed` is almost always
+        // false (the token only flips when claude/codex first shows up).
+        if changed { persist() }
+    }
+
     /// Pick the most representative icon for a workspace based on what its
     /// panes are currently running. AI / SSH / dev tools beat plain shell.
-    func iconKind(for workspace: Workspace) -> WorkspaceIconKind {
+    private func liveIconKind(for workspace: Workspace) -> WorkspaceIconKind {
         // Agent push-state wins over pid polling — if any pane reported a
         // claude/codex hook in this workspace, surface that. With several
         // agent panes (e.g. claude + codex side by side) the busy one wins;

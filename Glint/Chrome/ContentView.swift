@@ -502,6 +502,7 @@ private struct WorkspaceSwitcherRow: View {
             case .needsPermission: return String(localized: "needs approval")
             case .compacting:      return String(localized: "compacting…")
             case .justCompleted:   return String(localized: "✓ done")
+            case .failed:          return String(localized: "error")
             case .idle:            break
             }
         }
@@ -516,6 +517,7 @@ private struct WorkspaceSwitcherRow: View {
         case .needsPermission:  return Color(red: 1.0, green: 0.45, blue: 0.42)
         case .compacting:       return Color(red: 0.43, green: 0.72, blue: 0.86)
         case .justCompleted:    return Color(red: 0.40, green: 0.86, blue: 0.55)
+        case .failed:           return Color(red: 0.96, green: 0.36, blue: 0.34)
         case .idle:             return nil
         }
     }
@@ -526,6 +528,7 @@ private struct WorkspaceSwitcherRow: View {
         case .needsPermission:  return Color(red: 1.0, green: 0.27, blue: 0.23)
         case .compacting:       return Color(red: 0.35, green: 0.66, blue: 0.82)
         case .justCompleted:    return Color(red: 0.30, green: 0.78, blue: 0.46)
+        case .failed:           return Color(red: 0.90, green: 0.28, blue: 0.26)
         case .idle:             return .clear
         }
     }

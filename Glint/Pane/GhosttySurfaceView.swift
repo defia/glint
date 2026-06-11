@@ -28,6 +28,13 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// proc_pidinfo polling because it's event-driven.
     var cachedCwd: String?
 
+    private var scrollbackEnabled: Bool {
+        (UserDefaults.standard.object(forKey: "glint.restoreTerminalScrollback") as? Bool) ?? true
+    }
+    private var scrollbackID: String? {
+        paneKey.map { ScrollbackArchive.fileID(forPaneKey: $0) }
+    }
+
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
     override var isFlipped: Bool { false }
@@ -212,11 +219,162 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         self.surface = s
         removeSurfaceCreationError()
 
+        // Terminal history restore: echo last session's saved plain-text
+        // scrollback into the fresh surface (clean even for TUIs — it's the
+        // final character grid, not a replay of the render stream). Gated by a
+        // setting. Snapshots are taken later via `read_text`, off the hot path.
+        if scrollbackEnabled {
+            restoreScrollback(into: s)
+        }
+
         // Route the initial size through the same CATransaction path the
         // resize hooks use, so frame 0 already has drawableSize aligned
         // with view bounds — no first-paint stretch from the layer's
         // default 0×0 drawable.
         syncSurfaceSize(pointsSize: bounds.size)
+    }
+
+    /// Echo the previous session's saved colored scrollback into a freshly
+    /// created surface. The saved bytes are a flat colored text dump (SGR color
+    /// codes + newlines only — no cursor moves, mode switches, or negotiation),
+    /// rebuilt from the final grid, so it can't corrupt the new terminal even if
+    /// the prior session ended inside a full-screen TUI.
+    private func restoreScrollback(into s: ghostty_surface_t) {
+        guard let id = scrollbackID,
+              let data = ScrollbackArchive.read(id: id), !data.isEmpty,
+              !data.isEmpty else { return }
+        var text = String(decoding: data, as: UTF8.self)
+        guard !text.isEmpty else { return }
+        // Saved with \n line breaks; the terminal needs CRLF or each line would
+        // start under the previous line's end (staircase).
+        text = text.replacingOccurrences(of: "\r\n", with: "\n")
+                   .replacingOccurrences(of: "\n", with: "\r\n")
+        let payload = text + "\u{1b}[0m\r\n\u{1b}[2m"
+            + String(localized: "── session restored ──") + "\u{1b}[0m\r\n"
+        // process_output renders bytes as child output (history), NOT as input —
+        // it must never go through text_input or the shell would execute it.
+        payload.withCString { ghostty_surface_process_output(s, $0, UInt(strlen($0))) }
+    }
+
+    /// Snapshot the pane's current scrollback to disk as colored text (ANSI SGR).
+    /// Driven off the hot path (store flush timer + app terminate).
+    func flushScrollbackToDisk() {
+        guard let id = scrollbackID, let text = readColoredSnapshot(), !text.isEmpty else { return }
+        ScrollbackArchive.write(id: id, data: Data(text.utf8))
+    }
+
+    /// Last `maxScrollbackLines` rows of scrollback + screen, with color.
+    private let maxScrollbackLines = 3000
+
+    /// Read the pane's scrollback + screen as ANSI-colored text. Uses the cmux
+    /// fork's `ghostty_surface_render_grid_json`, which exports the FINAL grid
+    /// (viewport + N scrollback rows) with per-cell fg/bg/attrs — clean even for
+    /// TUIs (it reads grid state, it is NOT a replay of the raw render stream,
+    /// which is what corrupted the earlier byte-tee approach). We rebuild a flat
+    /// colored text dump from the spans so restore stays a simple echo.
+    private func readColoredSnapshot() -> String? {
+        guard let s = surface else { return nil }
+        let json = ghostty_surface_render_grid_json(s, "", 0, 0, UInt(maxScrollbackLines))
+        defer { ghostty_string_free(json) }
+        guard let ptr = json.ptr, json.len > 0 else { return nil }
+        let data = Data(bytes: ptr, count: Int(json.len))
+        return Self.reconstructANSI(fromRenderGrid: data, maxLines: maxScrollbackLines)
+    }
+
+    // MARK: render-grid JSON → ANSI text
+
+    private struct RenderGrid: Decodable {
+        struct Style: Decodable {
+            let id: Int
+            let foreground: String
+            let background: String
+            let bold, faint, italic, underline, blink, inverse, invisible, strikethrough, overline: Bool
+        }
+        struct Span: Decodable {
+            let row: Int
+            let column: Int
+            let style_id: Int
+            let cell_width: Int
+            let text: String
+        }
+        let styles: [Style]
+        let row_spans: [Span]
+        let scrollback_spans: [Span]
+        let scrollback_rows: Int
+        let rows: Int
+    }
+
+    private static func rgb(_ hex: String) -> (Int, Int, Int)? {
+        guard hex.count == 7, hex.hasPrefix("#"), let v = Int(hex.dropFirst(), radix: 16) else { return nil }
+        return ((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
+    }
+
+    private static func isBlankLine(_ s: String) -> Bool {
+        let stripped = s.replacingOccurrences(of: "\u{1b}\\[[0-9;]*m", with: "", options: .regularExpression)
+        return stripped.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Rebuild flat colored text from a render-grid JSON frame. Each span emits
+    /// an absolute SGR (reset + attrs + truecolor fg/bg) so ordering is
+    /// stable; default-colored spans omit fg/bg so the restored text still
+    /// adopts the current theme's default colors instead of being painted with
+    /// the capture-time palette.
+    private static func reconstructANSI(fromRenderGrid data: Data, maxLines: Int) -> String? {
+        guard let grid = try? JSONDecoder().decode(RenderGrid.self, from: data),
+              let defaultStyle = grid.styles.first else { return nil }
+        var styleByID: [Int: RenderGrid.Style] = [:]
+        for st in grid.styles { styleByID[st.id] = st }
+
+        func sgr(for id: Int) -> String {
+            guard let st = styleByID[id] else { return "\u{1b}[0m" }
+            var codes = ["0"]
+            if st.bold { codes.append("1") }
+            if st.faint { codes.append("2") }
+            if st.italic { codes.append("3") }
+            if st.underline { codes.append("4") }
+            if st.blink { codes.append("5") }
+            if st.inverse { codes.append("7") }
+            if st.invisible { codes.append("8") }
+            if st.strikethrough { codes.append("9") }
+            if st.overline { codes.append("53") }
+            if st.foreground != defaultStyle.foreground, let c = rgb(st.foreground) {
+                codes.append("38;2;\(c.0);\(c.1);\(c.2)")
+            }
+            if st.background != defaultStyle.background, let c = rgb(st.background) {
+                codes.append("48;2;\(c.0);\(c.1);\(c.2)")
+            }
+            return "\u{1b}[" + codes.joined(separator: ";") + "m"
+        }
+
+        func renderRegion(_ spans: [RenderGrid.Span], rowCount: Int) -> [String] {
+            var byRow: [Int: [RenderGrid.Span]] = [:]
+            for sp in spans { byRow[sp.row, default: []].append(sp) }
+            let maxRow = max(rowCount - 1, byRow.keys.max() ?? -1)
+            guard maxRow >= 0 else { return [] }
+            var lines: [String] = []
+            lines.reserveCapacity(maxRow + 1)
+            for r in 0...maxRow {
+                var line = ""
+                var col = 0
+                for sp in (byRow[r] ?? []).sorted(by: { $0.column < $1.column }) {
+                    if sp.column > col {
+                        line += "\u{1b}[0m" + String(repeating: " ", count: sp.column - col)
+                    }
+                    line += sgr(for: sp.style_id) + sp.text
+                    col = sp.column + sp.cell_width
+                }
+                line += "\u{1b}[0m"
+                lines.append(line)
+            }
+            return lines
+        }
+
+        var lines = renderRegion(grid.scrollback_spans, rowCount: grid.scrollback_rows)
+        lines += renderRegion(grid.row_spans, rowCount: grid.rows)
+        while let last = lines.last, isBlankLine(last) { lines.removeLast() }
+        if lines.count > maxLines { lines = Array(lines.suffix(maxLines)) }
+        let text = lines.joined(separator: "\n")
+        return text.isEmpty ? nil : text
     }
 
     // MARK: - surface creation failure UI
@@ -1171,5 +1329,65 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     func characterIndex(for point: NSPoint) -> Int {
         0
+    }
+}
+
+// MARK: - Terminal scrollback restore (colored snapshot via render_grid_json)
+
+/// On-disk store for per-pane scrollback snapshots (ANSI-colored text). Writes
+/// run on a background serial queue; reads happen once at surface creation. Each
+/// file is capped by `maxScrollbackLines`.
+enum ScrollbackArchive {
+    private static let queue = DispatchQueue(label: "app.glint.scrollback.io", qos: .utility)
+
+    private static var dir: URL? {
+        guard let appSupport = try? FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true) else { return nil }
+        let d = appSupport.appendingPathComponent("Glint/scrollback", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    /// Filesystem-safe name from a pane key ("<uuid>:<seq>").
+    static func fileID(forPaneKey paneKey: String) -> String {
+        String(paneKey.map { ($0 == ":" || $0 == "/") ? "_" : $0 })
+    }
+
+    private static func url(for id: String) -> URL? {
+        dir?.appendingPathComponent("\(id).ansi", isDirectory: false)
+    }
+
+    static func read(id: String) -> Data? {
+        guard let u = url(for: id) else { return nil }
+        return try? Data(contentsOf: u)
+    }
+
+    static func write(id: String, data: Data) {
+        guard let u = url(for: id) else { return }
+        queue.async { try? data.write(to: u, options: [.atomic]) }
+    }
+
+    static func delete(id: String) {
+        guard let u = url(for: id) else { return }
+        queue.async { try? FileManager.default.removeItem(at: u) }
+    }
+
+    /// Remove snapshots whose pane no longer exists, plus any leftover files
+    /// from earlier designs: `.raw` (byte-tee replay) and `.txt` (plain-text
+    /// read_text) — one-time migration to the colored `.ansi` format.
+    static func prune(keeping ids: Set<String>) {
+        queue.async {
+            guard let dir,
+                  let files = try? FileManager.default.contentsOfDirectory(
+                    at: dir, includingPropertiesForKeys: nil) else { return }
+            for f in files {
+                let ext = f.pathExtension
+                if ext == "raw" || ext == "txt" { try? FileManager.default.removeItem(at: f); continue }
+                guard ext == "ansi" else { continue }
+                let id = f.deletingPathExtension().lastPathComponent
+                if !ids.contains(id) { try? FileManager.default.removeItem(at: f) }
+            }
+        }
     }
 }

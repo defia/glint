@@ -4,6 +4,7 @@ import ImageIO
 
 struct SidebarView: View {
     @EnvironmentObject var store: WorkspaceStore
+    @EnvironmentObject var usage: UsageStore
     @State private var searchText: String = ""
     @FocusState private var searchFocused: Bool
     /// UUID of the workspace card currently mid-drag. Set by the dragged
@@ -53,12 +54,16 @@ struct SidebarView: View {
             }
             .scrollContentBackground(.hidden)
 
-            newWorkspaceCard
-                .padding(.horizontal, 10)
-                .padding(.vertical, 10)
-                .overlay(alignment: .top) {
-                    Rectangle().fill(Theme.divider).frame(height: 1)
-                }
+            VStack(spacing: 0) {
+                QuotaSection(claude: usage.claude, codex: usage.codex)
+                newWorkspaceCard
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
+                    .padding(.bottom, 10)
+            }
+            .overlay(alignment: .top) {
+                Rectangle().fill(Theme.divider).frame(height: 1)
+            }
         }
     }
 
@@ -78,9 +83,13 @@ struct SidebarView: View {
         // drag-assigned order within each group. Using enumerated() +
         // offset as the tiebreaker keeps the sort deterministic regardless
         // of `sorted(by:)` stability guarantees.
+        func attention(_ e: Workspace) -> Bool {
+            let s = store.agentSummary(for: e)?.status
+            return s == .justCompleted || s == .failed   // both float: finished or errored
+        }
         return base.enumerated().sorted { lhs, rhs in
-            let lhsDone = store.agentSummary(for: lhs.element)?.status == .justCompleted
-            let rhsDone = store.agentSummary(for: rhs.element)?.status == .justCompleted
+            let lhsDone = attention(lhs.element)
+            let rhsDone = attention(rhs.element)
             if lhsDone != rhsDone { return lhsDone }
             return lhs.offset < rhs.offset
         }.map(\.element)
@@ -182,6 +191,148 @@ struct SidebarView: View {
         .padding(.bottom, 4)
     }
 
+}
+
+/// Bottom-of-sidebar usage readout (above New Workspace). One row per agent
+/// that currently has data: a name column, then two equal-width tracks — the
+/// rolling session (5h) window and the weekly (7d) window — each captioned
+/// with its percent and a compact reset countdown. Renders nothing when no
+/// agent has data, so the divider+New Workspace sit flush as before.
+private struct QuotaSection: View {
+    let claude: AgentQuota?
+    let codex: AgentQuota?
+
+    /// Brand fills, matching the sidebar mascot shadows.
+    private static let claudeColor = Color(red: 235/255, green: 140/255, blue: 82/255)
+    private static let codexColor = Color(red: 82/255, green: 97/255, blue: 255/255)
+    private static let warnColor = Color(red: 1.0, green: 0.745, blue: 0.18) // #FFBE2E
+
+    var body: some View {
+        if claude == nil && codex == nil {
+            EmptyView()
+        } else {
+            VStack(spacing: 10) {
+                if let claude {
+                    QuotaRow(name: "Claude", quota: claude,
+                             color: Self.claudeColor, warn: Self.warnColor)
+                }
+                if let codex {
+                    QuotaRow(name: "Codex", quota: codex,
+                             color: Self.codexColor, warn: Self.warnColor)
+                }
+            }
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color.white.opacity(0.03))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.04))
+                    )
+            )
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
+        }
+    }
+}
+
+private struct QuotaRow: View {
+    let name: String
+    let quota: AgentQuota
+    let color: Color
+    let warn: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(name)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.text2)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(width: 40, alignment: .leading)
+
+            // Recompute the reset countdowns every minute even between store
+            // polls so "48m" visibly ticks down.
+            TimelineView(.periodic(from: .now, by: 60)) { ctx in
+                HStack(spacing: 8) {
+                    QuotaColumn(
+                        kind: "5h",
+                        percent: quota.sessionPercent,
+                        resetsAt: quota.sessionResetsAt,
+                        now: ctx.date,
+                        fill: color,
+                        warn: quota.sessionIsWarn ? warn : nil
+                    )
+                    QuotaColumn(
+                        kind: "7d",
+                        percent: quota.weeklyPercent,
+                        resetsAt: quota.weeklyResetsAt,
+                        now: ctx.date,
+                        fill: color.opacity(0.45),
+                        warn: nil
+                    )
+                }
+            }
+        }
+    }
+}
+
+/// One window track: caption (`5h 62% · 2h14m`) over a thin progress bar. A
+/// nil percent renders a muted "—" with an empty track so a single-window
+/// source still lines up under the other agent's two columns.
+private struct QuotaColumn: View {
+    let kind: String
+    let percent: Double?
+    let resetsAt: Date?
+    let now: Date
+    let fill: Color
+    /// Non-nil → tint the percent + reset readout (approaching the limit).
+    let warn: Color?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Text(kind)
+                    .foregroundStyle(Color(red: 0.365, green: 0.380, blue: 0.459)) // #5D6175
+                Spacer(minLength: 2)
+                if let percent {
+                    Text("\(Int(percent.rounded()))%")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(warn ?? Theme.text2)
+                    if let reset = resetText {
+                        Text(reset)
+                            .foregroundStyle(warn ?? Theme.text4)
+                    }
+                } else {
+                    Text("—").foregroundStyle(Theme.text4)
+                }
+            }
+            .font(.system(size: 9.5, design: .monospaced))
+            .lineLimit(1)
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.09))
+                    Capsule().fill(warn ?? fill)
+                        .frame(width: geo.size.width * CGFloat(min(max((percent ?? 0) / 100, 0), 1)))
+                }
+            }
+            .frame(height: 4)
+        }
+    }
+
+    /// Compact "time until reset": `6d8h` ≥1 day, `2h14m` ≥1 hour, else `48m`.
+    private var resetText: String? {
+        guard let resetsAt else { return nil }
+        let secs = Int(resetsAt.timeIntervalSince(now))
+        guard secs > 0 else { return "now" }
+        let d = secs / 86_400
+        let h = (secs % 86_400) / 3_600
+        let m = (secs % 3_600) / 60
+        if d >= 1 { return "\(d)d\(h)h" }
+        if h >= 1 { return "\(h)h\(m)m" }
+        return "\(m)m"
+    }
 }
 
 private struct WorkspaceCard: View {
@@ -458,13 +609,14 @@ private struct WorkspaceCard: View {
         case .some(.needsPermission):   return "permission"
         case .some(.compacting):        return "compacting"
         case .some(.justCompleted):     return "done"
+        case .some(.failed):            return "failed"
         }
     }
 
     private func showsTimer(_ s: PaneAgentStatus) -> Bool {
         switch s {
         case .thinking, .tool, .compacting, .needsPermission: return true
-        case .justCompleted, .idle:                           return false
+        case .justCompleted, .failed, .idle:                  return false
         }
     }
 
@@ -536,7 +688,8 @@ private struct WorkspaceCard: View {
     private func cardBorder(active: Bool, status: PaneAgentStatus?) -> some View {
         // Running turns leave the border alone — the edge beacon and the
         // traffic-light pill carry "busy". The border only marks selection
-        // and the two terminal states (permission / done).
+        // and the permission state (done relies on its one-shot flash, not a
+        // persistent border).
         RoundedRectangle(cornerRadius: 9, style: .continuous)
             .strokeBorder(
                 cardBorderColor(active: active, status: status),
@@ -598,6 +751,7 @@ private struct WorkspaceCard: View {
         case .needsPermission: return String(localized: "needs approval")
         case .compacting:      return String(localized: "compacting…")
         case .justCompleted:   return String(localized: "done")
+        case .failed:          return String(localized: "error")
         case .idle:            return ""
         }
     }
@@ -616,6 +770,7 @@ private struct WorkspaceCard: View {
         case .needsPermission: return LocalizedStringKey("needs approval")
         case .compacting:      return LocalizedStringKey("compacting…")
         case .justCompleted:   return LocalizedStringKey("✓ done")
+        case .failed:          return LocalizedStringKey("error")
         case .idle:            return LocalizedStringKey("")
         }
     }
@@ -626,18 +781,24 @@ private struct WorkspaceCard: View {
         case .needsPermission:  return Color(red: 1.0, green: 0.45, blue: 0.42)
         case .compacting:       return Color(red: 0.43, green: 0.72, blue: 0.86)
         case .justCompleted:    return Color(red: 0.40, green: 0.86, blue: 0.55)
+        case .failed:           return Color(red: 0.96, green: 0.36, blue: 0.34)
         case .idle:             return Theme.text4
         }
     }
 
     /// One hue for every border: status semantics live in the traffic-light
-    /// pill and the edge beacon, so the border only highlights the states
-    /// that demand a look (permission / done) plus selection.
+    /// pill, the edge beacon, and (for done) the one-shot completion flash —
+    /// so a persistent border only marks the one state that stays blocked on
+    /// the user (permission), plus the current selection. A just-completed
+    /// card draws no border of its own; selecting it shows the selection
+    /// border like any other card.
     private func cardBorderColor(active: Bool, status: PaneAgentStatus?) -> Color {
-        if status == .needsPermission || status == .justCompleted {
-            return Theme.accentBright.opacity(0.75)
-        }
-        return active ? Theme.accent.opacity(0.45) : Color.white.opacity(0.04)
+        // Only the selected card shows a resting border; every other card is
+        // borderless. Status-specific attention still comes through elsewhere:
+        // needsPermission keeps its breathing pulse overlay, `.justCompleted`
+        // its one-shot green flash, `.failed` its red traffic light + text.
+        _ = status
+        return active ? Theme.accent.opacity(0.45) : Color.clear
     }
 
     private func prettyCwd(_ path: String) -> String {
@@ -699,7 +860,7 @@ private struct ClaudeMascotIcon: View {
     /// readable).
     private func gifAssetName(for s: PaneAgentStatus?) -> String {
         switch s {
-        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted):
+        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed):
             return "ClaudeIdle"
         case .some(.thinking):
             return "ClaudeThinking"
@@ -748,7 +909,7 @@ private struct CodexMascotIcon: View {
 
     private func gifAssetName(for s: PaneAgentStatus?) -> String {
         switch s {
-        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted):
+        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed):
             return "CodexIdle"
         case .some(.thinking), .some(.compacting):
             return "CodexThinking"
@@ -923,7 +1084,7 @@ private struct AgentStatusDot: View {
 
     private func light(for s: PaneAgentStatus) -> TrafficLightPill.Light {
         switch s {
-        case .needsPermission:              return .red
+        case .needsPermission, .failed:     return .red
         case .thinking, .tool, .compacting: return .yellow
         case .justCompleted, .idle:         return .green
         }

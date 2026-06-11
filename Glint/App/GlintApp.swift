@@ -5,6 +5,7 @@ struct GlintApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var workspaceStore = WorkspaceStore()
     @StateObject private var updater = UpdaterController()
+    @StateObject private var usage = UsageStore()
 
     init() {
         // Apply the stored language choice BEFORE any view materializes so
@@ -25,6 +26,7 @@ struct GlintApp: App {
             ContentView()
                 .environmentObject(workspaceStore)
                 .environmentObject(updater)
+                .environmentObject(usage)
                 .frame(minWidth: 980, minHeight: 600)
                 .preferredColorScheme(.dark)
                 // Live language switching: AppleLanguages (set in init) only

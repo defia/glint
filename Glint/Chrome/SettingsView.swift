@@ -402,22 +402,30 @@ private struct GeneralPane: View {
             }
         }
 
-        SettingsCard("Startup") {
+        SettingsCard("Workspace") {
             SettingsRow("Restore last workspace",
                         subtitle: "Re-select the workspace you had focused when Glint last quit.") {
                 Toggle("", isOn: $store.restoreLastWorkspace)
                     .toggleStyle(.switch).labelsHidden()
             }
             SettingsDivider()
-            SettingsRow("Collapse sidebar on launch",
-                        subtitle: "Start with the sidebar hidden. ⌘/ to toggle.") {
-                Toggle("", isOn: $store.sidebarCollapsed)
+            SettingsRow("Restore terminal history",
+                        subtitle: "Restore each pane's previous scrollback (with colors) on launch. Running processes don't resume — only the text is restored.") {
+                Toggle("", isOn: $store.restoreTerminalScrollback)
                     .toggleStyle(.switch).labelsHidden()
             }
             SettingsDivider()
             SettingsRow("Float just-completed to top",
                         subtitle: "Bubble workspaces whose agent just finished a turn to the top of the sidebar. Sinks back when you open it.") {
                 Toggle("", isOn: $store.sortCompletedFirst)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+        }
+
+        SettingsCard("Startup") {
+            SettingsRow("Collapse sidebar on launch",
+                        subtitle: "Start with the sidebar hidden. ⌘/ to toggle.") {
+                Toggle("", isOn: $store.sidebarCollapsed)
                     .toggleStyle(.switch).labelsHidden()
             }
         }
@@ -588,6 +596,7 @@ private struct TerminalPane: View {
 
 private struct AgentsPane: View {
     @EnvironmentObject var store: WorkspaceStore
+    @EnvironmentObject var usage: UsageStore
     @State private var claudeInstallFailed = false
     @State private var codexInstallFailed = false
 
@@ -627,6 +636,12 @@ private struct AgentsPane: View {
                     .lineLimit(1)
                     .truncationMode(.head)
             }
+            SettingsDivider()
+            SettingsRow("Show usage in sidebar",
+                        subtitle: "Display Claude's 5-hour and weekly limits in the sidebar. Requires reading the login keychain (macOS asks once).") {
+                Toggle("", isOn: $usage.claudeEnabled)
+                    .toggleStyle(.switch).labelsHidden()
+            }
         }
 
         SettingsCard("Codex",
@@ -655,6 +670,12 @@ private struct AgentsPane: View {
                     }
                 }
             }
+            SettingsDivider()
+            SettingsRow("Show usage in sidebar",
+                        subtitle: "Display Codex's 5-hour and weekly limits in the sidebar.") {
+                Toggle("", isOn: $usage.codexEnabled)
+                    .toggleStyle(.switch).labelsHidden()
+            }
         }
 
         SettingsCard("Notifications",
@@ -668,6 +689,12 @@ private struct AgentsPane: View {
             SettingsRow("Sound on turn complete",
                         subtitle: "Play a softer chime when a background agent finishes its turn.") {
                 Toggle("", isOn: $store.soundOnTurnComplete)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Sound on error",
+                        subtitle: "Play an error tone when a background agent's turn ends in an API error.") {
+                Toggle("", isOn: $store.soundOnError)
                     .toggleStyle(.switch).labelsHidden()
             }
         }

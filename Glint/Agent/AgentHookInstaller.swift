@@ -37,6 +37,12 @@ enum AgentHookInstaller {
         "PermissionRequest",
         "PreCompact",
         "Stop",
+        // Claude fires StopFailure (NOT Stop) when a turn dies on an API/
+        // transport error — socket closed, rate-limit, auth, overload. Without
+        // it a failed turn never reports an end and the pane stays stuck on
+        // `.thinking`. It's side-effect-only (can't block the turn), which is
+        // exactly what we need: just report the error end.
+        "StopFailure",
     ]
 
     /// True if any hook bucket in `~/.claude/settings.json` already references

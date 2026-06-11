@@ -30,11 +30,13 @@
 		CEA0A8FF66046FEFA80FAC0C /* GlintApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB74659D174004C620D538A /* GlintApp.swift */; };
 		D1BDE1E5DE8D4FE1F96822D1 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8933F67B4B6EEA3FD4E603 /* WorkspaceStore.swift */; };
 		E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05F2CA2243872C8111048EF2 /* AgentBridge.swift */; };
+		A1B2C3D4E5F60000US01BF /* UsageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60000US02FR /* UsageStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		050E267AE14712D4D6633B4F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		05F2CA2243872C8111048EF2 /* AgentBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBridge.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60000US02FR /* UsageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStore.swift; sourceTree = "<group>"; };
 		08FC2FBC9E8729A5ECBF857C /* PaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneView.swift; sourceTree = "<group>"; };
 		16137B405E48DBE262A15B6D /* PaneSurfaceRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSurfaceRepresentable.swift; sourceTree = "<group>"; };
 		1E646AABA8ADCE8A2A5C6F55 /* PaneTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeView.swift; sourceTree = "<group>"; };
@@ -120,6 +122,7 @@
 			isa = PBXGroup;
 			children = (
 				05F2CA2243872C8111048EF2 /* AgentBridge.swift */,
+				A1B2C3D4E5F60000US02FR /* UsageStore.swift */,
 				265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */,
 				41DDB9C7B5A277B7924270A3 /* PaneAgentState.swift */,
 			);
@@ -263,6 +266,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */,
+				A1B2C3D4E5F60000US01BF /* UsageStore.swift in Sources */,
 				3932A4CFEFF6FB81AE283645 /* AgentHookInstaller.swift in Sources */,
 				5157C5439862F21202BCC44D /* AppDelegate.swift in Sources */,
 				CD7908F096580864CB2992ED /* ContentView.swift in Sources */,
