@@ -340,11 +340,15 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreLastWorkspace, forKey: "glint.restoreLastWorkspace") }
     }
 
-    /// Replay each pane's last-session terminal output (colors intact) into the
-    /// new shell on launch. Records the raw PTY stream into a small fixed ring
-    /// per pane; off = no recording installed at all. Defaults to on.
+    /// Restore each pane's previous scrollback (colors intact) on launch via a
+    /// render-grid snapshot taken off the hot path; off = nothing written or
+    /// read. Defaults to on. Turning it off also purges any snapshots already on
+    /// disk, so the feature leaves no residual persisted history behind.
     @Published var restoreTerminalScrollback: Bool = (UserDefaults.standard.object(forKey: "glint.restoreTerminalScrollback") as? Bool) ?? true {
-        didSet { UserDefaults.standard.set(restoreTerminalScrollback, forKey: "glint.restoreTerminalScrollback") }
+        didSet {
+            UserDefaults.standard.set(restoreTerminalScrollback, forKey: "glint.restoreTerminalScrollback")
+            if !restoreTerminalScrollback { ScrollbackArchive.purgeAll() }
+        }
     }
 
     /// Play a chime when the focused pane in a background workspace flips

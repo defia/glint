@@ -1373,6 +1373,17 @@ enum ScrollbackArchive {
         queue.async { try? FileManager.default.removeItem(at: u) }
     }
 
+    /// Wipe every snapshot — called when the user turns the feature off, so no
+    /// previously-captured history lingers on disk.
+    static func purgeAll() {
+        queue.async {
+            guard let dir,
+                  let files = try? FileManager.default.contentsOfDirectory(
+                    at: dir, includingPropertiesForKeys: nil) else { return }
+            for f in files { try? FileManager.default.removeItem(at: f) }
+        }
+    }
+
     /// Remove snapshots whose pane no longer exists, plus any leftover files
     /// from earlier designs: `.raw` (byte-tee replay) and `.txt` (plain-text
     /// read_text) — one-time migration to the colored `.ansi` format.
