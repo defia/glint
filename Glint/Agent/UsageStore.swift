@@ -366,12 +366,18 @@ enum ClaudeUsageReader {
     ///
     /// `token()` loads once per launch (our item first, falling back to Claude's
     /// and seeding ours). `refreshFromSource(rejected:)` re-reads Claude's item
-    /// on a genuine auth failure — guarded by `triedSource` to fire AT MOST ONCE
-    /// per launch, so a permanently-failing endpoint can't re-prompt every poll.
+    /// on a genuine auth failure — THROTTLED to once per 15 minutes rather than
+    /// once per launch: Claude Code rotates its access token every few hours,
+    /// so a long-running app sees several rotations in one launch. A once-ever
+    /// guard permanently froze the quota bar after the second rotation (every
+    /// poll 401'd, the stale last-known numbers stayed up until relaunch). The
+    /// throttle still prevents prompt storms when the endpoint fails for other
+    /// reasons.
     private actor TokenCache {
         private var cached: String?
         private var loaded = false
-        private var triedSource = false
+        private var lastSourceRead: Date?
+        private static let sourceReadInterval: TimeInterval = 15 * 60
         func token() -> String? {
             if !loaded {
                 cached = ClaudeUsageReader.loadToken()
@@ -379,17 +385,23 @@ enum ClaudeUsageReader {
             }
             return cached
         }
-        /// Re-read Claude's source item once, after `rejected` came back 401/403.
-        /// Persists the fresh token into our own item. Returns it only if it
-        /// actually changed (else `nil` — no point retrying the same token, and
-        /// the guard means we won't prompt for this again this launch).
+        /// Re-read Claude's source item after `rejected` came back 401/403,
+        /// at most once per throttle window. Persists the fresh token into our
+        /// own item. Returns it only if it actually changed (no point retrying
+        /// the same token). A failed read keeps the old cached token so a later
+        /// window can try the source again once Claude Code has rotated it.
         func refreshFromSource(rejected: String) -> String? {
-            guard !triedSource else { return nil }
-            triedSource = true
+            if let last = lastSourceRead,
+               Date().timeIntervalSince(last) < Self.sourceReadInterval {
+                return nil
+            }
+            lastSourceRead = Date()
             let fresh = ClaudeUsageReader.readClaudeToken()
-            if let fresh { ClaudeUsageReader.saveGlintToken(fresh) }
-            cached = fresh
-            return (fresh != rejected) ? fresh : nil
+            if let fresh {
+                ClaudeUsageReader.saveGlintToken(fresh)
+                cached = fresh
+            }
+            return (fresh != nil && fresh != rejected) ? fresh : nil
         }
     }
     private static let cache = TokenCache()
