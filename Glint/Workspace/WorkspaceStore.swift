@@ -448,9 +448,10 @@ final class WorkspaceStore: ObservableObject {
 
     /// Restore each pane's previous scrollback (colors intact) on launch via a
     /// render-grid snapshot taken off the hot path; off = nothing written or
-    /// read. Defaults to on. Turning it off also purges any snapshots already on
-    /// disk, so the feature leaves no residual persisted history behind.
-    @Published var restoreTerminalScrollback: Bool = (UserDefaults.standard.object(forKey: "glint.restoreTerminalScrollback") as? Bool) ?? true {
+    /// read. Defaults to off — opt-in, since it persists terminal contents to
+    /// disk. Turning it off also purges any snapshots already on disk, so the
+    /// feature leaves no residual persisted history behind.
+    @Published var restoreTerminalScrollback: Bool = (UserDefaults.standard.object(forKey: "glint.restoreTerminalScrollback") as? Bool) ?? false {
         didSet {
             UserDefaults.standard.set(restoreTerminalScrollback, forKey: "glint.restoreTerminalScrollback")
             if !restoreTerminalScrollback { ScrollbackArchive.purgeAll() }

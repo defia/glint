@@ -50,7 +50,8 @@ final class UsageStore: ObservableObject {
     @Published private(set) var claude: AgentQuota?
     @Published private(set) var codex: AgentQuota?
 
-    /// Per-agent switches, persisted, default on.
+    /// Per-agent switches, persisted, default off — opt-in, since Claude's
+    /// poll needs login-keychain access (a system prompt on first read).
     @Published var claudeEnabled: Bool {
         didSet {
             guard claudeEnabled != oldValue else { return }
@@ -80,8 +81,8 @@ final class UsageStore: ObservableObject {
     private var anyEnabled: Bool { claudeEnabled || codexEnabled }
 
     init() {
-        self.claudeEnabled = (UserDefaults.standard.object(forKey: Self.claudeKey) as? Bool) ?? true
-        self.codexEnabled = (UserDefaults.standard.object(forKey: Self.codexKey) as? Bool) ?? true
+        self.claudeEnabled = (UserDefaults.standard.object(forKey: Self.claudeKey) as? Bool) ?? false
+        self.codexEnabled = (UserDefaults.standard.object(forKey: Self.codexKey) as? Bool) ?? false
         // Show the last-known numbers immediately so the bars don't pop in blank
         // on launch; the first poll refreshes them a moment later.
         if claudeEnabled { self.claude = Self.loadQuota(.claude) }
