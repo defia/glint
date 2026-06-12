@@ -114,17 +114,12 @@ struct SidebarView: View {
                 Spacer()
             }
             .padding(8)
+            // Bare row like the workspace list above: the accent "+" well
+            // is the CTA anchor; hover gets the same faint wash as the
+            // rows instead of a box + border.
             .background(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Color.white.opacity(newWorkspaceHovered ? 0.06 : 0.03))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(
-                        newWorkspaceHovered
-                            ? Theme.accent.opacity(0.45)
-                            : Theme.border
-                    )
+                    .fill(Color.white.opacity(newWorkspaceHovered ? 0.04 : 0))
             )
             .contentShape(Rectangle())
         }
@@ -221,15 +216,10 @@ private struct QuotaSection: View {
                              color: Self.codexColor, warn: Self.warnColor)
                 }
             }
+            // Bare rows on the shared surface — the divider above the
+            // bottom section already separates this block; a box around
+            // read-only telemetry was chrome for chrome's sake.
             .padding(8)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Color.white.opacity(0.03))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.04))
-                    )
-            )
             .padding(.horizontal, 10)
             .padding(.top, 10)
         }
@@ -404,9 +394,8 @@ private struct WorkspaceCard: View {
         }
         .padding(8)
         .background(cardBackground(active: active))
-        // Border/flash/pulse overlays are decorative — hide from VoiceOver
+        // Flash/pulse overlays are decorative — hide from VoiceOver
         // so the combined element doesn't pick up phantom children.
-        .overlay(cardBorder(active: active, status: status).accessibilityHidden(true))
         .overlay(completionFlashOverlay.accessibilityHidden(true))
         .overlay(permissionPulseOverlay(status: status).accessibilityHidden(true))
         .overlay(alignment: .leading) {
@@ -646,9 +635,13 @@ private struct WorkspaceCard: View {
     /// the parent VStack.
     private func cardBackground(active: Bool) -> some View {
         let fill: Color = {
-            if active { return Color.white.opacity(0.09) }
-            if isHovered { return Color.white.opacity(0.055) }
-            return Color.white.opacity(0.03)
+            // Selection speaks through hue — same language as the header's
+            // accent tab pill. Idle rows are bare (no fill, no border) so
+            // the list reads as rows on one shared surface, not a stack of
+            // boxes.
+            if active { return Theme.accent.opacity(0.16) }
+            if isHovered { return Color.white.opacity(0.04) }
+            return .clear
         }()
         return RoundedRectangle(cornerRadius: 9, style: .continuous)
             .fill(fill)
@@ -699,18 +692,6 @@ private struct WorkspaceCard: View {
             )
             .allowsHitTesting(false)
         }
-    }
-
-    private func cardBorder(active: Bool, status: PaneAgentStatus?) -> some View {
-        // Running turns leave the border alone — the edge beacon and the
-        // traffic-light pill carry "busy". The border only marks selection
-        // and the permission state (done relies on its one-shot flash, not a
-        // persistent border).
-        RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .strokeBorder(
-                cardBorderColor(active: active, status: status),
-                lineWidth: 1
-            )
     }
 
     /// While a turn is running, a small accent bar breathes on the card's
@@ -816,15 +797,6 @@ private struct WorkspaceCard: View {
     /// the user (permission), plus the current selection. A just-completed
     /// card draws no border of its own; selecting it shows the selection
     /// border like any other card.
-    private func cardBorderColor(active: Bool, status: PaneAgentStatus?) -> Color {
-        // Only the selected card shows a resting border; every other card is
-        // borderless. Status-specific attention still comes through elsewhere:
-        // needsPermission keeps its breathing pulse overlay, `.justCompleted`
-        // its one-shot green flash, `.failed` its red traffic light + text.
-        _ = status
-        return active ? Theme.accent.opacity(0.45) : Color.clear
-    }
-
     private func prettyCwd(_ path: String) -> String {
         let home = NSHomeDirectory()
         if path == home { return "~" }

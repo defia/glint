@@ -29,27 +29,28 @@ struct CommandPalette: View {
                 resultList
             }
             .frame(width: 520, height: 420)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(.clear)
-                    .background(
-                        ZStack {
-                            VisualEffectBackground(material: .menu)
-                            LinearGradient(
-                                colors: [
-                                    Theme.sidebarTintTop.opacity(0.96),
-                                    Theme.sidebarTintBottom.opacity(0.96),
-                                ],
-                                startPoint: .topLeading, endPoint: .bottomTrailing
-                            )
-                        }
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            // Liquid Glass panel on macOS 26 — the palette floats over the
+            // terminal in the same window, exactly the layering glass is
+            // built to refract. Glass draws its own rim light, so the manual
+            // hairline stroke lives only in the fallback.
+            .liquidGlass(enabled: store.glassEffect, cornerRadius: 14,
+                         tint: Theme.glassTint) {
+                ZStack {
+                    VisualEffectBackground(material: .menu)
+                    LinearGradient(
+                        colors: [
+                            Theme.sidebarTintTop.opacity(0.96),
+                            Theme.sidebarTintBottom.opacity(0.96),
+                        ],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
                     )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
-            )
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                )
+            }
             .shadow(color: Color.black.opacity(0.5), radius: 30, y: 12)
             .padding(.top, -80) // bias slightly above center
         }

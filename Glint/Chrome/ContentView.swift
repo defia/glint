@@ -4,28 +4,24 @@ import AppKit
 struct ContentView: View {
     @EnvironmentObject var store: WorkspaceStore
 
+    /// Photos-style chrome (macOS 26 + glass on): no header band — the
+    /// terminal runs to the top of the window and the toolbar floats over
+    /// it as Liquid Glass islands. Pre-26 / glass-off keeps the stacked
+    /// band layout.
+    private var floatingHeader: Bool { liquidGlassAvailable && store.glassEffect }
+
     var body: some View {
         HStack(spacing: 0) {
             if !store.sidebarCollapsed {
+                // Exactly the pane area's color: ghostty paints an opaque
+                // `background = 0B0A14` (= Theme.bgPane), so a flat fill
+                // makes the two surfaces read as one, split only by the
+                // hairline. (A Tahoe floating glass sidebar was tried and
+                // rejected: with nothing but flat near-black behind it,
+                // glass has nothing to refract and reads as a gray slab.)
                 SidebarView()
                     .frame(width: 244)
-                    .background(
-                        Group {
-                            if store.glassEffect {
-                                ZStack {
-                                    VisualEffectBackground(material: .sidebar)
-                                    LinearGradient(
-                                        colors: [Theme.sidebarTintTop, Theme.sidebarTintBottom],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing)
-                                }
-                            } else {
-                                // Fully opaque flat surface — no vibrancy
-                                // pass-through, no semi-transparent overlay.
-                                Color(red: 0.094, green: 0.094, blue: 0.122)
-                            }
-                        }
-                    )
+                    .background(Theme.bgPane)
                     .overlay(alignment: .trailing) {
                         Rectangle().fill(Color.white.opacity(0.045)).frame(width: 1)
                     }
@@ -33,11 +29,21 @@ struct ContentView: View {
             }
 
             VStack(spacing: 0) {
-                ToolbarHeader()
+                if !floatingHeader {
+                    ToolbarHeader()
+                }
                 PaneTreeView(node: store.currentRoot, workspaceID: store.selectedWorkspaceID)
                     .background(Theme.bgPane)
             }
             .background(Theme.bgPane)
+            // Floating mode: the terminal owns the full height and the
+            // toolbar's glass islands ride on top of it. Empty stretches of
+            // the strip stay click-through to the panes below.
+            .overlay(alignment: .top) {
+                if floatingHeader {
+                    ToolbarHeader()
+                }
+            }
         }
         .ignoresSafeArea()
         .background(Theme.bgWindow)
@@ -77,23 +83,39 @@ struct ToolbarHeader: View {
     /// or the toolbar starts with a dead zone.
     @State private var isFullscreen = false
 
+    /// Photos-style floating chrome — same condition as
+    /// `ContentView.floatingHeader`: islands of glass instead of a band.
+    private var floating: Bool { liquidGlassAvailable && store.glassEffect }
+
     var body: some View {
         HStack(spacing: 10) {
-            Button {
-                store.sidebarCollapsed.toggle()
-            } label: {
-                Image(systemName: store.sidebarCollapsed
-                      ? "sidebar.left"
-                      : "sidebar.leading")
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.text3)
-            .help(store.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar")
-            .keyboardShortcut("/", modifiers: .command)
+            // Leading island: sidebar toggle + wordmark share one glass
+            // capsule (Photos' leading-cluster pattern). A bare wordmark
+            // over the terminal is unreadable — text on text — so the brand
+            // always needs glass between itself and the grid.
+            HStack(spacing: 4) {
+                Button {
+                    store.sidebarCollapsed.toggle()
+                } label: {
+                    Image(systemName: store.sidebarCollapsed
+                          ? "sidebar.left"
+                          : "sidebar.leading")
+                        .font(.system(size: 16, weight: .medium))
+                        .frame(width: 38, height: 38)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.text3)
+                .help(store.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar")
+                .keyboardShortcut("/", modifiers: .command)
 
-            GlintBrandMark()
+                GlintBrandMark()
+                    // Floating mode has no band to grab, so the wordmark
+                    // area doubles as the window-drag handle.
+                    .background(WindowDragSurface())
+                    .padding(.trailing, 10)
+            }
+            .liquidGlass(enabled: floating, cornerRadius: 19)
 
             if store.sidebarCollapsed {
                 WorkspaceSwitcher()
@@ -117,6 +139,10 @@ struct ToolbarHeader: View {
                     store.settingsOpen = true
                 }
             }
+            // Tahoe-style grouped toolbar cluster: the two trailing buttons
+            // share one resting glass capsule (38pt tall → radius 19). Pre-26
+            // or glass-off, the buttons stay bare as before.
+            .liquidGlass(enabled: store.glassEffect, cornerRadius: 19)
         }
         // Traffic lights take ~78pt when sidebar is collapsed; otherwise the
         // sidebar reserves that gutter for us. In full screen there are no
@@ -133,21 +159,27 @@ struct ToolbarHeader: View {
             isFullscreen = false
         }
         .background(
+            // Floating mode draws no band at all — the islands carry their
+            // own glass and the gaps stay click-through to the terminal.
             Group {
-                if store.glassEffect {
-                    ZStack {
-                        VisualEffectBackground(material: .titlebar, allowsWindowDrag: true)
-                        Theme.toolbarTint
+                if !floating {
+                    if store.glassEffect {
+                        ZStack {
+                            VisualEffectBackground(material: .titlebar, allowsWindowDrag: true)
+                            Theme.toolbarTint
+                        }
+                    } else {
+                        // Flat — slightly lighter than sidebar so toolbar
+                        // still reads as its own band.
+                        Color(red: 0.118, green: 0.118, blue: 0.149)
                     }
-                } else {
-                    // Flat — slightly lighter than sidebar so toolbar still
-                    // reads as its own band.
-                    Color(red: 0.118, green: 0.118, blue: 0.149)
                 }
             }
         )
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Color.white.opacity(0.04)).frame(height: 1)
+            if !floating {
+                Rectangle().fill(Color.white.opacity(0.04)).frame(height: 1)
+            }
         }
     }
 
@@ -178,12 +210,17 @@ struct TabBar: View {
         }
     }
 
+    /// Photos-style: the whole chip cluster shares one Liquid Glass capsule
+    /// (the active chip's white fill reads as the selected segment).
+    private var glassCluster: Bool { liquidGlassAvailable && store.glassEffect }
+
     private func chips(ws: Workspace, available: CGFloat) -> some View {
         let plan = TabBarPlan(
             tabs: ws.tabs,
             activeID: ws.selectedTabID,
             names: ws.tabs.map { ws.tabDisplayName($0) },
-            available: available
+            // The capsule's own padding eats into the strip.
+            available: available - (glassCluster ? 8 : 0)
         )
         return HStack(spacing: 5) {
             ForEach(ws.tabs) { tab in
@@ -198,23 +235,39 @@ struct TabBar: View {
                     tabs: ws.tabs.filter { plan.overflowed.contains($0.id) }
                 )
             }
-            newTabButton
+            NewTabButton { store.newTab() }
         }
+        // Uniform 4pt inset: 30pt chips → a 38pt capsule, the same height
+        // and radius as the leading/trailing islands, with the chip pills
+        // (radius 15) concentric to the capsule's 19.
+        .padding(glassCluster ? 4 : 0)
+        .liquidGlass(enabled: glassCluster, cornerRadius: 19)
         .fixedSize()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeOut(duration: 0.15), value: plan)
     }
+}
 
-    private var newTabButton: some View {
-        Button { store.newTab() } label: {
+/// "+" with a circular hover well, matching the toolbar icons' shape
+/// language inside the glass capsule.
+private struct NewTabButton: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
             Image(systemName: "plus")
                 .font(.system(size: 12, weight: .medium))
                 .frame(width: 26, height: 26)
+                .background(
+                    Circle().fill(Color.white.opacity(hovering ? 0.08 : 0))
+                )
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(Theme.text3)
         .help("New Tab (⌘T)")
+        .onHover { hovering = $0 }
     }
 }
 
@@ -299,6 +352,9 @@ private struct TabChip: View {
         Button { store.selectTab(tab.id) } label: {
             HStack(spacing: 7) {
                 TabIcon(kind: kind, size: 15)
+                    // Unselected tabs recede to bare dimmed text+icon in the
+                    // glass cluster, so the accent pill is the only chrome.
+                    .opacity(isActive || !inGlassCluster ? 1 : 0.7)
                 Text(ws.tabDisplayName(tab))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(isActive ? Theme.text1 : Theme.text3)
@@ -310,12 +366,26 @@ private struct TabChip: View {
             .padding(.leading, 9)
             .padding(.trailing, 8)
             .frame(height: 30)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(chipFill)
-            )
+            .background {
+                if inGlassCluster {
+                    // Music-app filter style: the selected tab is a solid
+                    // accent capsule (hue carries selection — luminance
+                    // alone turns to mud on dark glass) with a soft brand
+                    // glow; unselected tabs are bare text that gains a
+                    // faint capsule only on hover.
+                    Capsule(style: .continuous)
+                        .fill(chipFill)
+                        .shadow(color: isActive ? store.accent.opacity(0.35) : .clear,
+                                radius: 6, y: 1)
+                } else {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(chipFill)
+                }
+            }
             .overlay(alignment: .bottom) {
-                if isActive {
+                // Segmented-pill style carries selection in the fill; the
+                // accent underline only belongs to the band layout.
+                if isActive && !inGlassCluster {
                     RoundedRectangle(cornerRadius: 1, style: .continuous)
                         .fill(store.accent.opacity(0.9))
                         .frame(height: 2)
@@ -332,9 +402,16 @@ private struct TabChip: View {
         .animation(.easeOut(duration: 0.12), value: isActive)
     }
 
+    /// Same condition as TabBar.glassCluster — chips restyle as segments
+    /// when they live inside the Liquid Glass capsule.
+    private var inGlassCluster: Bool { liquidGlassAvailable && store.glassEffect }
+
     private var chipFill: Color {
-        if isActive { return Color.white.opacity(0.08) }
-        if hovering { return Color.white.opacity(0.04) }
+        // Slightly translucent so the glass still refracts through the
+        // accent pill.
+        if isActive { return inGlassCluster ? store.accent.opacity(0.85)
+                                            : Color.white.opacity(0.08) }
+        if hovering { return Color.white.opacity(inGlassCluster ? 0.07 : 0.04) }
         return .clear
     }
 
@@ -355,7 +432,11 @@ private struct TabChip: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(isActive ? Theme.text2 : Theme.text3)
+                // On the solid accent pill the close glyph needs to be
+                // near-white; the grays vanish into the accent.
+                .foregroundStyle(inGlassCluster && isActive
+                                 ? Color.white.opacity(0.9)
+                                 : (isActive ? Theme.text2 : Theme.text3))
             } else if let status, status != .idle {
                 TabStatusDot(status: status)
             }
@@ -578,7 +659,8 @@ private struct TabOverflowChip: View {
             .padding(.horizontal, 8)
             .frame(height: 24)
             .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: inGlassCluster ? 12 : 6,
+                                 style: .continuous)
                     .fill(capsuleFill)
             )
             .contentShape(Rectangle())
@@ -593,6 +675,8 @@ private struct TabOverflowChip: View {
                 .environmentObject(store)
         }
     }
+
+    private var inGlassCluster: Bool { liquidGlassAvailable && store.glassEffect }
 
     private var capsuleFill: Color {
         if isOpen { return Color.white.opacity(0.10) }
@@ -822,11 +906,16 @@ private struct ToolbarIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 32, height: 32)
+                .font(.system(size: 15, weight: .medium))
+                .frame(width: 38, height: 38)
                 .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    // Circular hover well, inset so it always stays inside
+                    // the surrounding glass capsule — a rounded square's
+                    // corners poke past the capsule's end-cap curve and
+                    // read as a misaligned dark blob over the terminal.
+                    Circle()
                         .fill(Color.white.opacity(hovering ? 0.08 : 0))
+                        .padding(2)
                 )
                 .contentShape(Rectangle())
         }
@@ -961,6 +1050,8 @@ private struct WorkspaceSwitcher: View {
                             .strokeBorder(pillStroke, lineWidth: 0.5)
                     )
             )
+            .liquidGlass(enabled: liquidGlassAvailable && store.glassEffect,
+                         cornerRadius: 7, interactive: true)
             .animation(.easeOut(duration: 0.15), value: isOpen)
             .animation(.easeOut(duration: 0.12), value: hover)
             .fixedSize()

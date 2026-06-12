@@ -502,7 +502,7 @@ private struct AppearancePane: View {
         }
 
         SettingsCard("Glass effect",
-                     footer: "Turns vibrancy on or off for the sidebar and toolbar. Off gives a flat look — useful on older Macs.") {
+                     footer: "Turns vibrancy on or off for the sidebar and toolbar. On macOS 26 this also enables Liquid Glass for the command palette, tabs and toolbar. Off gives a flat look — useful on older Macs.") {
             SettingsRow("Enable glass effect", subtitle: nil) {
                 Toggle("", isOn: $store.glassEffect)
                     .toggleStyle(.switch).labelsHidden()

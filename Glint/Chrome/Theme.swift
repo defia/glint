@@ -11,6 +11,11 @@ enum Theme {
     static let sidebarTintBottom = Color(red: 0.045, green: 0.038, blue: 0.085).opacity(0.90)
     static let toolbarTint       = Color(red: 0.060, green: 0.052, blue: 0.095).opacity(0.86)
 
+    // Liquid Glass tint (macOS 26): the sidebar indigo, but thin enough that
+    // the glass still refracts the terminal behind it instead of reading as
+    // a painted slab.
+    static let glassTint         = Color(red: 0.075, green: 0.065, blue: 0.110).opacity(0.5)
+
     // text
     static let text1 = Color(red: 0.925, green: 0.929, blue: 0.949)        // #ECEDF2
     static let text2 = Color(red: 0.717, green: 0.725, blue: 0.784)        // #B7B9C8
