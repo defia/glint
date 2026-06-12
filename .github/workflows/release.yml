@@ -25,7 +25,7 @@ jobs:
       # so we never interpolate ${{ github.ref_name }} directly into shell.
       TAG_NAME: ${{ github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           submodules: recursive
@@ -57,7 +57,7 @@ jobs:
 
       - name: Cache GhosttyKit.xcframework
         id: ghostty-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             Vendor/GhosttyKit.xcframework
@@ -204,7 +204,7 @@ jobs:
         run: bash scripts/update-appcast.sh
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         env:
           HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_ED_PRIV_KEY != '' }}
         with:
