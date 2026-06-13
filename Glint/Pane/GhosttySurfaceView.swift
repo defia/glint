@@ -361,6 +361,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         let scrollback_spans: [Span]
         let scrollback_rows: Int
         let rows: Int
+        // Per-row soft-wrap flags (true = row continues into the next). Optional
+        // so snapshots written before this field still decode.
+        let row_wraps: [Bool]?
+        let scrollback_row_wraps: [Bool]?
     }
 
     private static func rgb(_ hex: String) -> (Int, Int, Int)? {
@@ -428,11 +432,37 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             return lines
         }
 
-        var lines = renderRegion(grid.scrollback_spans, rowCount: grid.scrollback_rows)
-        lines += renderRegion(grid.row_spans, rowCount: grid.rows)
-        while let last = lines.last, isBlankLine(last) { lines.removeLast() }
-        if lines.count > maxLines { lines = Array(lines.suffix(maxLines)) }
-        let text = lines.joined(separator: "\n")
+        let sbLines = renderRegion(grid.scrollback_spans, rowCount: grid.scrollback_rows)
+        let vpLines = renderRegion(grid.row_spans, rowCount: grid.rows)
+        let lines = sbLines + vpLines
+
+        // Per-line wrap flags aligned to `lines`. A soft-wrapped row must be
+        // re-joined with the next one (no `\n`) so a single logical line that
+        // ghostty wrapped across grid rows doesn't restore as several hard
+        // lines; the new terminal re-wraps it to its own width.
+        var wraps = [Bool](repeating: false, count: lines.count)
+        let sbW = grid.scrollback_row_wraps ?? []
+        for i in 0..<min(sbLines.count, sbW.count) { wraps[i] = sbW[i] }
+        let vpW = grid.row_wraps ?? []
+        for i in 0..<min(vpLines.count, vpW.count) { wraps[sbLines.count + i] = vpW[i] }
+
+        var logical: [String] = []
+        var current = ""
+        var open = false
+        for i in 0..<lines.count {
+            current += lines[i]
+            open = true
+            if !(i < wraps.count && wraps[i]) {
+                logical.append(current)
+                current = ""
+                open = false
+            }
+        }
+        if open { logical.append(current) }
+
+        while let last = logical.last, isBlankLine(last) { logical.removeLast() }
+        if logical.count > maxLines { logical = Array(logical.suffix(maxLines)) }
+        let text = logical.joined(separator: "\n")
         return text.isEmpty ? nil : text
     }
 
