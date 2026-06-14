@@ -1455,7 +1455,7 @@ enum WorkspaceIconKind {
     /// SF Symbol name. Returns nil for kinds we render as a text glyph.
     var sfSymbol: String? {
         switch self {
-        case .shell:  return "terminal.fill"
+        case .shell:  return "command"
         case .ssh:    return "network"
         case .vim:    return "text.cursor"
         case .python: return "chevron.left.forwardslash.chevron.right"
@@ -1578,13 +1578,11 @@ extension WorkspaceStore {
     /// restores the tab's persisted agent identity, exactly like
     /// `iconKind(for:)` does for workspaces. A live agent/process always wins.
     func tabIconKind(_ tab: WorkspaceTab, in workspace: Workspace) -> WorkspaceIconKind {
-        let live = liveIconKind(paneIDs: tab.root.leaves, workspaceID: workspace.id)
-        if case .shell = live,
-           let hint = tab.iconHint,
-           let restored = WorkspaceIconKind.fromPersistToken(hint) {
-            return restored
-        }
-        return live
+        // Tab chips never restore an agent identity from `iconHint` — only
+        // a live claude/codex process surfaces an agent icon. Sidebar cards
+        // and the workspace switcher still go through iconKind(for:) and
+        // keep their memory behavior.
+        liveIconKind(paneIDs: tab.root.leaves, workspaceID: workspace.id)
     }
 
     /// Icon to display for a workspace. Prefers what's running live; after a
