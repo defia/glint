@@ -4,11 +4,11 @@ import AppKit
 struct ContentView: View {
     @EnvironmentObject var store: WorkspaceStore
 
-    /// Photos-style chrome (macOS 26 + glass on): no header band — the
-    /// terminal runs to the top of the window and the toolbar floats over
-    /// it as Liquid Glass islands. Pre-26 / glass-off keeps the stacked
-    /// band layout.
-    private var floatingHeader: Bool { liquidGlassAvailable && store.glassEffect }
+    /// Photos-style chrome (glass on): no header band — the terminal runs to
+    /// the top of the window and the toolbar floats over it as glass islands.
+    /// On macOS 26+ the islands use real Liquid Glass; pre-26 they use the
+    /// in-house `GlassCapsuleFallback`. Glass off → stacked band layout.
+    private var floatingHeader: Bool { store.glassEffect }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -91,7 +91,7 @@ struct ToolbarHeader: View {
 
     /// Photos-style floating chrome — same condition as
     /// `ContentView.floatingHeader`: islands of glass instead of a band.
-    private var floating: Bool { liquidGlassAvailable && store.glassEffect }
+    private var floating: Bool { store.glassEffect }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -225,9 +225,9 @@ struct TabBar: View {
         }
     }
 
-    /// Photos-style: the whole chip cluster shares one Liquid Glass capsule
-    /// (the active chip's white fill reads as the selected segment).
-    private var glassCluster: Bool { liquidGlassAvailable && store.glassEffect }
+    /// Photos-style: the whole chip cluster shares one glass capsule (the
+    /// active chip's accent fill reads as the selected segment).
+    private var glassCluster: Bool { store.glassEffect }
 
     private func chips(ws: Workspace, available: CGFloat) -> some View {
         let plan = TabBarPlan(
@@ -366,7 +366,7 @@ private struct TabChip: View {
         let kind = store.tabIconKind(tab, in: ws)
         let status = store.tabAgentStatus(tab, in: ws)
         Button { store.selectTab(tab.id) } label: {
-            HStack(spacing: 7) {
+            HStack(spacing: 4) {
                 TabIcon(kind: kind, size: 18, status: status)
                     // Unselected tabs recede to bare dimmed text+icon in the
                     // glass cluster, so the accent pill is the only chrome.
@@ -379,8 +379,8 @@ private struct TabChip: View {
                     .frame(maxWidth: 150)
                 trailingSlot(status: status)
             }
-            .padding(.leading, 9)
-            .padding(.trailing, 8)
+            .padding(.leading, 4)
+            .padding(.trailing, 5)
             .frame(height: 30)
             .background {
                 if inGlassCluster {
@@ -403,7 +403,7 @@ private struct TabChip: View {
                     RoundedRectangle(cornerRadius: 1, style: .continuous)
                         .fill(store.accent.opacity(0.9))
                         .frame(height: 2)
-                        .padding(.horizontal, 9)
+                        .padding(.horizontal, 4)
                         .padding(.bottom, 1.5)
                 }
             }
@@ -417,8 +417,8 @@ private struct TabChip: View {
     }
 
     /// Same condition as TabBar.glassCluster — chips restyle as segments
-    /// when they live inside the Liquid Glass capsule.
-    private var inGlassCluster: Bool { liquidGlassAvailable && store.glassEffect }
+    /// when they live inside the glass capsule.
+    private var inGlassCluster: Bool { store.glassEffect }
 
     private var chipFill: Color {
         // Slightly translucent so the glass still refracts through the
@@ -697,7 +697,7 @@ private struct TabOverflowChip: View {
         }
     }
 
-    private var inGlassCluster: Bool { liquidGlassAvailable && store.glassEffect }
+    private var inGlassCluster: Bool { store.glassEffect }
 
     private var capsuleFill: Color {
         if isOpen { return Color.white.opacity(0.10) }
@@ -1096,7 +1096,7 @@ private struct WorkspaceSwitcher: View {
 
     /// Same condition as the other header islands — the pill restyles as a
     /// full-height glass capsule when the floating chrome is active.
-    private var glassPill: Bool { liquidGlassAvailable && store.glassEffect }
+    private var glassPill: Bool { store.glassEffect }
 
     private var pillFill: Color {
         if isOpen { return Color.white.opacity(0.10) }

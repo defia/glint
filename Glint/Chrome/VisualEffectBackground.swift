@@ -78,16 +78,52 @@ var liquidGlassAvailable: Bool {
     return false
 }
 
+/// Pre-26 stand-in for the system's Liquid Glass — a real NSVisualEffectView
+/// (so the terminal grid genuinely blurs through) clipped to the same rounded
+/// shape, with a hairline border and a faint top sheen so the capsule reads
+/// as glass and not a flat slab. Used as the default fallback by the
+/// no-fallback `liquidGlass(enabled:cornerRadius:)` so the floating-island
+/// header stays consistent on macOS < 26.
+struct GlassCapsuleFallback: View {
+    let cornerRadius: CGFloat
+    var tint: Color?
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        ZStack {
+            VisualEffectBackground(material: .hudWindow)
+            // Dark wash to bring the capsule down to glint's near-black
+            // palette — hudWindow alone reads too bright on the terminal.
+            Color.black.opacity(0.35)
+            if let tint {
+                tint.opacity(0.18)
+            }
+            // Faint top-down sheen so the upper edge catches "light" — the
+            // single cheapest cue that says "glass surface" rather than
+            // "translucent slab."
+            LinearGradient(
+                colors: [Color.white.opacity(0.06), Color.white.opacity(0)],
+                startPoint: .top, endPoint: .center
+            )
+        }
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))
+    }
+}
+
 /// Puts macOS 26 Liquid Glass behind the content when the OS supports it and
-/// the user's glass toggle is on; otherwise renders the supplied fallback as
-/// a plain background. Centralizing the `#available` branch keeps call sites
-/// to a single modifier — they describe both looks in one place instead of
-/// forking their whole view chain.
+/// the user's glass toggle is on. Pre-26 + glass on falls back to
+/// `GlassCapsuleFallback` (no-user-fallback overload) or to the caller's
+/// fallback (the overload that takes one). Glass off short-circuits to the
+/// supplied fallback / nothing, so the band layout keeps working untouched.
 struct LiquidGlassSurface<Fallback: View>: ViewModifier {
     let enabled: Bool
     let cornerRadius: CGFloat
     var tint: Color?
     var interactive: Bool
+    /// True when the caller didn't supply a fallback — we substitute the
+    /// in-house glass capsule so floating islands keep working pre-26.
+    var autoCapsule: Bool
     @ViewBuilder let fallback: () -> Fallback
 
     func body(content: Content) -> some View {
@@ -96,6 +132,8 @@ struct LiquidGlassSurface<Fallback: View>: ViewModifier {
                 glass,
                 in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             )
+        } else if enabled && autoCapsule {
+            content.background(GlassCapsuleFallback(cornerRadius: cornerRadius, tint: tint))
         } else {
             content.background(fallback())
         }
@@ -124,8 +162,9 @@ extension View {
         }
     }
 
-    /// Liquid Glass with no fallback — for accents (chips, button wells)
-    /// whose pre-26 look is already painted by the call site.
+    /// Liquid Glass with the in-house capsule as automatic pre-26 fallback —
+    /// for floating header islands that need the capsule on every macOS so
+    /// the layout doesn't fork. `enabled=false` paints nothing (band layout).
     func liquidGlass(enabled: Bool,
                      cornerRadius: CGFloat,
                      tint: Color? = nil,
@@ -134,11 +173,13 @@ extension View {
                                     cornerRadius: cornerRadius,
                                     tint: tint,
                                     interactive: interactive,
+                                    autoCapsule: true,
                                     fallback: { EmptyView() }))
     }
 
-    /// Liquid Glass that replaces an entire background — the fallback is
-    /// what pre-26 systems (or glass-off users) get instead.
+    /// Liquid Glass with a caller-supplied fallback — for surfaces (modals,
+    /// dialogs) whose pre-26 look is hand-painted differently from the
+    /// floating-island capsule.
     func liquidGlass<F: View>(enabled: Bool,
                               cornerRadius: CGFloat,
                               tint: Color? = nil,
@@ -148,6 +189,7 @@ extension View {
                                     cornerRadius: cornerRadius,
                                     tint: tint,
                                     interactive: interactive,
+                                    autoCapsule: false,
                                     fallback: fallback))
     }
 }
