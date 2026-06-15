@@ -284,23 +284,20 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         if let sock = agentSocketPath { envPairs.append((strdup("GLINT_AGENT_SOCK"), strdup(sock))) }
         defer { envPairs.forEach { free($0.0); free($0.1) } }
 
-        // Launch command is decided per-surface: a pane restoring a
-        // scrollback snapshot gets the plain login shell — the padded
-        // launcher's clear-screen would wipe the freshly injected viewport,
-        // leaving the prompt at the top and history only in scrollback.
-        // Fresh panes get the launcher (hides the login banner + pads the
-        // prompt below the floating glass header).
+        // Reserve a top inset for the floating-island header when this pane
+        // is the one that sits flush against the chrome (split children are
+        // tucked below it and don't need the offset). The ghostty fork
+        // paints scrollback rows up into this strip so the islands' glass
+        // blur shows real content scrolling through, not a dead band.
+        if topAligned, let pt = GhosttyManager.floatingHeaderInsetPt() {
+            cfg.viewport_top_offset = pt
+        }
+
         let restoreData: Data? = {
             guard scrollbackEnabled, let id = scrollbackID,
                   let data = ScrollbackArchive.read(id: id), !data.isEmpty else { return nil }
             return data
         }()
-        var cmdBuf: UnsafeMutablePointer<CChar>? = nil
-        if restoreData == nil, topAligned, let launcher = GhosttyManager.paddedShellLauncherPath() {
-            cmdBuf = strdup(launcher)
-            cfg.command = UnsafePointer(cmdBuf)
-        }
-        defer { if cmdBuf != nil { free(cmdBuf) } }
 
         var envArray: [ghostty_env_var_s] = envPairs.map {
             ghostty_env_var_s(key: UnsafePointer($0.0), value: UnsafePointer($0.1))

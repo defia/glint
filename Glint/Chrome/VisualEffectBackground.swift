@@ -91,10 +91,22 @@ struct GlassCapsuleFallback: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         ZStack {
-            VisualEffectBackground(material: .hudWindow)
-            // Dark wash to bring the capsule down to glint's near-black
-            // palette — hudWindow alone reads too bright on the terminal.
-            Color.black.opacity(0.35)
+            // `.underPageBackground` is the darkest stock vibrancy
+            // material in dark mode — `.hudWindow` was a HUD-style frosty
+            // light grey and even a 0.6 black wash couldn't fully tame it
+            // (you could see the capsule "settle" a frame or two after
+            // the viewport-top-offset's scrollback rows landed underneath
+            // and blurred up through the glass).
+            //
+            // State pinned to `.active` so the material doesn't flash the
+            // lighter `.inactive` palette during the first frames while
+            // the window is still picking up key state.
+            VisualEffectBackground(material: .underPageBackground, state: .active)
+            // Light black wash — underPageBackground is already the
+            // darker stock material, so we only need a small nudge to
+            // keep the capsule reading as glass without flattening it
+            // into an opaque slab.
+            Color.black.opacity(0.3)
             if let tint {
                 tint.opacity(0.18)
             }
