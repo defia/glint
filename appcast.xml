@@ -6,16 +6,19 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.18-beta.12</title>
-      <sparkle:version>202606160719</sparkle:version>
-      <sparkle:shortVersionString>0.1.18-beta.12</sparkle:shortVersionString>
+      <title>Glint 0.1.18-beta.13</title>
+      <sparkle:version>202606160924</sparkle:version>
+      <sparkle:shortVersionString>0.1.18-beta.13</sparkle:shortVersionString>
       <sparkle:channel>beta</sparkle:channel>
-      <pubDate>Tue, 16 Jun 2026 07:21:00 +0000</pubDate>
+      <pubDate>Tue, 16 Jun 2026 09:25:27 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.12</h3><ul>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.13</h3><ul>
+    <li><strong>feat(workspace): archive workspaces to a collapsible sidebar group</strong><br><span style="color:#666">新增工作区归档：把工作区收进 sidebar 顶部的可折叠&quot;已归档 N&quot;区，</span></li>
+    <li>release: appcast for v0.1.18-beta.12</li>
+  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.12</h3><ul>
     <li><strong>feat(agents): opt-in resume of claude/codex sessions on launch</strong><br><span style="color:#666">智能体: 新增&quot;启动时恢复会话&quot;开关(Claude/Codex 各一,默认关),开后切回上次跑 agent 的窗格时自动执行 claude --continue / codex resume --last</span></li>
     <li>release: appcast for v0.1.18-beta.11</li>
-  </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.11</h3><ul>
+  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.11</h3><ul>
     <li><strong>fix(scroll): match upstream Ghostty 2x multiplier on precise trackpad deltas</strong><br><span style="color:#666">滚动手感: 触控板精确滚动对齐上游 Ghostty.app 的 2 倍速,不再发涩</span></li>
     <li>release: appcast for v0.1.18</li>
   </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18</h3><ul>
@@ -66,10 +69,74 @@
   </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.5</h3><ul>
     <li><strong>fix(shell): also delegate .zshenv and .zprofile to user&#x27;s real dir</strong><br><span style="color:#666">修复 beta.4 漏写 .zshenv/.zprofile 委托,导致 brew/orbstack/cargo 在恢复的终端里 PATH 丢失(pnpm not found 就是这个根因);现在补两个 stub,新开 pane 立即恢复正常。</span></li>
     <li>release: appcast for v0.1.18-beta.4</li>
-  </ul></div><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.4</h3><ul>
-    <li><strong>feat(shell): per-pane zsh history + history-driven ghost-text completion</strong><br><span style="color:#666">每个终端的命令历史独立(↑ 只看本 pane,关闭时合并回全局),并新增历史驱动的暗灰自动补全(右方向键/End 接受完整,Ctrl-→ 接受一个词);设置→终端→Shell 可关。</span></li>
-    <li>release: appcast for v0.1.18-beta.3</li>
   </ul></div>]]></description>
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.18-beta.13/Glint-0.1.18-beta.13.dmg" length="15267308" type="application/octet-stream" sparkle:edSignature="iREruetNVdHhFfhl2K1dQkSF95ZxxKJwjsnErRbG5TMi0peg5EATbV+b6YeAS0KqAJ+vTcWnga/ODxcnfQ9bBQ==" />
+    </item>
+    <item>
+      <title>Glint 0.1.18-beta.12</title>
+      <sparkle:version>202606160719</sparkle:version>
+      <sparkle:shortVersionString>0.1.18-beta.12</sparkle:shortVersionString>
+      <sparkle:channel>beta</sparkle:channel>
+      <pubDate>Tue, 16 Jun 2026 07:21:00 +0000</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description>&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.12&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(agents): opt-in resume of claude/codex sessions on launch&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;智能体: 新增&amp;quot;启动时恢复会话&amp;quot;开关(Claude/Codex 各一,默认关),开后切回上次跑 agent 的窗格时自动执行 claude --continue / codex resume --last&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.11&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;!--GLINT_HISTORY_BELOW--&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3 style="color:#666;"&gt;历史版本 · Previous releases&lt;/h3&gt;&lt;/div&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.11&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix(scroll): match upstream Ghostty 2x multiplier on precise trackpad deltas&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;滚动手感: 触控板精确滚动对齐上游 Ghostty.app 的 2 倍速,不再发涩&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.10&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(viewport-top-offset): align hit-test + IME with rounded renderer inset&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 viewport-top-offset 下选中文本错位一行 + 输入法定位偏离的两处子 cell 余数 bug,选区/输入法坐标改用渲染器实际使用的整 cell 取整值。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.9&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(header): apply floating header inset on pre-26 too&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 macOS 15.x 上开启玻璃效果时浮岛 header 与终端首行重叠的问题（之前误判为只有 macOS 26 才需要 padding）。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(paste): add &amp;quot;Don&amp;#x27;t ask again&amp;quot; + Settings toggle for multi-line paste warning&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;粘贴多行文本的确认弹框新增&amp;quot;不再询问&amp;quot;勾选框，设置 → 终端 → 粘贴里也有同名开关可以随时切回。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.8&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: v0.1.18-beta.8 (re-publish for signature mismatch in beta.7)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;重新发布 beta.7 内容,修复上一版构建竞争导致的 Sparkle 签名错位&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.7&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.7&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;ghosttykit: publish xcframework-fb620db-v1&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;更新 GhosttyKit 预构建,匹配新 ghostty 子模块&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(header): use ghostty viewport-top-offset for floating header inset&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;浮岛 header 改用 ghostty viewport-top-offset 渲染滚动内容,prompt 紧贴 islands 下沿,不再插空行&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.6&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;revert: drop ZDOTDIR-swap per-pane history (back to industry default)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;撤掉 ZDOTDIR 注入方案——zsh 的 rc 加载语义跟 $ZDOTDIR 绑定,我们镜像不完(beta.4/5 PATH 丢失就是这个根因),且 Prezto/oh-my-zsh 等读 ZDOTDIR 也会撞;业界(Kitty/Wezterm/Alacritty/Ghostty)都不做这事是有道理的;需要这能力的用户推荐装 atuin。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.5&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(shell): also delegate .zshenv and .zprofile to user&amp;#x27;s real dir&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 beta.4 漏写 .zshenv/.zprofile 委托,导致 brew/orbstack/cargo 在恢复的终端里 PATH 丢失(pnpm not found 就是这个根因);现在补两个 stub,新开 pane 立即恢复正常。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.4&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(shell): per-pane zsh history + history-driven ghost-text completion&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;每个终端的命令历史独立(↑ 只看本 pane,关闭时合并回全局),并新增历史驱动的暗灰自动补全(右方向键/End 接受完整,Ctrl-→ 接受一个词);设置→终端→Shell 可关。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.3&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(chrome): floating glass islands on macOS &amp;lt; 26, tighter tab chips&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;macOS 26 以下也能用浮岛风的玻璃 header；标签页横向更紧凑。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.2&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: default Claude icon switches to the Spark mark&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;Claude 默认图标从橙色吉祥物改为 ✦ 火花标——已在 Settings 里选过的人保留原选择,新用户/未选过的人现在默认看到 spark&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(pane): start bottom split prompt at the divider, not 3 rows below&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 Shift+Cmd+D 纵向分屏出来的下半 pane 顶部空 3 行的问题——下半 pane 不接触浮动 header,不再注入垫行启动脚本;横向分屏(左右)两边仍按需垫行&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;docs: refresh README screenshots&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;更新 README 截图——主图换成最新的 Liquid Glass 界面,新增一张侧栏多状态总览图(thinking/tool/等待批准/已完成/失败 一次看清)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.1&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat: stop tab chips from remembering agents; new default icon&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;标签页图标不再记忆已退场的 agent——只反映当前真实在跑的;默认终端图标统一改为 ⌘ command(sidebar、工作区切换器、标签页都一致)&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;release: appcast for v0.1.17&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;补回 v0.1.17 流水线未能提交的 appcast item,恢复稳定版自动更新分发&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;fix(ci): force-checkout main when committing appcast&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复发版流水线最后一步——切回 main 提交 appcast 时用 -f 丢弃工作区脏文件,不再因 appcast.xml 冲突中止&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.17-beta.9&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.10&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix(viewport-top-offset): align hit-test + IME with rounded renderer inset&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 viewport-top-offset 下选中文本错位一行 + 输入法定位偏离的两处子 cell 余数 bug,选区/输入法坐标改用渲染器实际使用的整 cell 取整值。&lt;/span&gt;&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.9&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix(header): apply floating header inset on pre-26 too&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 macOS 15.x 上开启玻璃效果时浮岛 header 与终端首行重叠的问题（之前误判为只有 macOS 26 才需要 padding）。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(paste): add &amp;quot;Don&amp;#x27;t ask again&amp;quot; + Settings toggle for multi-line paste warning&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;粘贴多行文本的确认弹框新增&amp;quot;不再询问&amp;quot;勾选框，设置 → 终端 → 粘贴里也有同名开关可以随时切回。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.8&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.8&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;release: v0.1.18-beta.8 (re-publish for signature mismatch in beta.7)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;重新发布 beta.7 内容,修复上一版构建竞争导致的 Sparkle 签名错位&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.7&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.7&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.7&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;ghosttykit: publish xcframework-fb620db-v1&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;更新 GhosttyKit 预构建,匹配新 ghostty 子模块&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;strong&gt;feat(header): use ghostty viewport-top-offset for floating header inset&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;浮岛 header 改用 ghostty viewport-top-offset 渲染滚动内容,prompt 紧贴 islands 下沿,不再插空行&lt;/span&gt;&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.6&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;revert: drop ZDOTDIR-swap per-pane history (back to industry default)&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;撤掉 ZDOTDIR 注入方案——zsh 的 rc 加载语义跟 $ZDOTDIR 绑定,我们镜像不完(beta.4/5 PATH 丢失就是这个根因),且 Prezto/oh-my-zsh 等读 ZDOTDIR 也会撞;业界(Kitty/Wezterm/Alacritty/Ghostty)都不做这事是有道理的;需要这能力的用户推荐装 atuin。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.5&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.5&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;fix(shell): also delegate .zshenv and .zprofile to user&amp;#x27;s real dir&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;修复 beta.4 漏写 .zshenv/.zprofile 委托,导致 brew/orbstack/cargo 在恢复的终端里 PATH 丢失(pnpm not found 就是这个根因);现在补两个 stub,新开 pane 立即恢复正常。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.4&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;&lt;hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"&gt;&lt;div style="font-family:-apple-system,sans-serif;"&gt;&lt;h3&gt;更新内容 · What's new in 0.1.18-beta.4&lt;/h3&gt;&lt;ul&gt;
+    &lt;li&gt;&lt;strong&gt;feat(shell): per-pane zsh history + history-driven ghost-text completion&lt;/strong&gt;&lt;br&gt;&lt;span style="color:#666"&gt;每个终端的命令历史独立(↑ 只看本 pane,关闭时合并回全局),并新增历史驱动的暗灰自动补全(右方向键/End 接受完整,Ctrl-→ 接受一个词);设置→终端→Shell 可关。&lt;/span&gt;&lt;/li&gt;
+    &lt;li&gt;release: appcast for v0.1.18-beta.3&lt;/li&gt;
+  &lt;/ul&gt;&lt;/div&gt;</description>
       <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.18-beta.12/Glint-0.1.18-beta.12.dmg" length="15266572" type="application/octet-stream" sparkle:edSignature="U6GyYW2oM5WTV0V4jBUiqaCZtT6SAN1+eY2g5QWNdtySSR95Uvlucz+AAXq164bp8rI/vUmbLZWAUHZFA4T2BQ==" />
     </item>
     <item>
