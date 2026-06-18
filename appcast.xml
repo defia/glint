@@ -6,18 +6,14 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.21-beta.4</title>
-      <sparkle:version>202606181405</sparkle:version>
-      <sparkle:shortVersionString>0.1.21-beta.4</sparkle:shortVersionString>
+      <title>Glint 0.1.21-beta.5</title>
+      <sparkle:version>202606181412</sparkle:version>
+      <sparkle:shortVersionString>0.1.21-beta.5</sparkle:shortVersionString>
       <sparkle:channel>beta</sparkle:channel>
-      <pubDate>Thu, 18 Jun 2026 14:07:20 +0000</pubDate>
+      <pubDate>Thu, 18 Jun 2026 14:13:23 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.4</h3><ul>
-    <li><strong>feat(terminal): opt-in shell keybindings to normalize modified keys</strong><br><span style="color:#666">终端: 新增可选的 Shell 按键绑定(设置 → 终端,默认关),规整 ghostty 发出但裸 zsh/bash 不认识的带修饰键转义,避免在提示符下泄漏(Shift+Enter → ;2;13~、Shift+Right → 1;2C)或失效。覆盖带修饰 Enter/方向键/Home/End/Delete。绑定写到 ~/.config/glint/ 独立文件,rc 里只加一行 source 引用;卸载时删除引用并移除文件。不影响 Claude/Codex 窗格(它们自己要用这些转义)。</span></li>
-    <li><strong>feat(agent): gate hook auto-install on agent presence + OpenCode icons &amp; resume</strong><br><span style="color:#666">智能体: hook 自动安装改为先检测本机是否装了对应 agent,只为真正存在的 agent 弹安装提示(不再无脑写三家配置);未安装的 agent 不标记已处理,以后装了还会再提示。设置页按 agent 显示&quot;未检测到&quot;状态。新增 OpenCode&quot;启动时恢复会话&quot;开关(opencode --continue)。并入 OpenCode 图标/吉祥物组。</span></li>
-    <li><strong>feat(agent): add OpenCode status support (#4)</strong><br><span style="color:#666">新增 OpenCode 一等公民支持——独立身份/图标、hook 插件驱动状态、设置页安装开关,不再被识别成 Claude。</span></li>
-    <li><strong>fix(input): handle Shift+Enter (and modified keys) with Chinese IMEs</strong><br><span style="color:#666">输入法: 修复中文输入法激活时 Shift+Enter 被输入法的 Shift 切换吃掉、传不到终端的问题。改为先用带文本累加器的 interpretKeyEvents 让输入法旁观这个组合键而不产生副作用,再由我们把按键发给 surface,surface 没处理才回退。flagsChanged 重写为按左右修饰键分别判定按下/抬起,且组字期间不触发。</span></li>
-    <li>release: appcast for v0.1.21-beta.3</li>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.5</h3><ul>
+    <li><strong>fix(assets): commit OpenCode icon set so it ships in release builds</strong><br><span style="color:#666">资源: 补提交 OpenCode 图标资源(吉祥物各状态 + mark),之前只提交了引用它们的代码、asset 文件本身没被跟踪,导致发布版缺图标、OpenCode 窗格图标空白(本地 dev 因有未跟踪文件而正常,掩盖了问题)。</span></li>
   </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.21-beta.3</h3><ul>
     <li><strong>feat(terminal): paste Finder files as paths &amp; ⌘-click to open files</strong><br><span style="color:#666">⌘V 粘贴 Finder 文件改为粘贴文件完整路径;⌘点击终端里的文件路径可直接打开(相对路径按 cwd 解析;可执行文件/应用改为在 Finder 中显示,防止执行不可信内容)</span></li>
     <li>release: appcast for v0.1.21-beta.2</li>
@@ -58,7 +54,7 @@
     <li><strong>fix(scroll): match upstream Ghostty 2x multiplier on precise trackpad deltas</strong><br><span style="color:#666">滚动手感: 触控板精确滚动对齐上游 Ghostty.app 的 2 倍速,不再发涩</span></li>
     <li>release: appcast for v0.1.18</li>
   </ul></div>]]></description>
-      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.21-beta.4/Glint-0.1.21-beta.4.dmg" length="15332804" type="application/octet-stream" sparkle:edSignature="Q5b5i+Uzg5utfv8Sxzs3kiQvsYdTRRGcKWnnjP14xyBeO9XwgUj1b64QFW+xwaTfCYhetOAvQ+kYhV8IeCCnBw==" />
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.21-beta.5/Glint-0.1.21-beta.5.dmg" length="15341501" type="application/octet-stream" sparkle:edSignature="+7vy9z0+xcFOAELpY8yNZCIN71YLzqmc/nNBLJ5yAJfan1UTiVeLEgy0czL7qK+OKIWg1sHtEWR67wuX9MH2Ag==" />
     </item>
     <item>
       <title>Glint 0.1.21-beta.3</title>
