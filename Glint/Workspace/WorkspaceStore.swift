@@ -1076,7 +1076,16 @@ final class WorkspaceStore: ObservableObject {
             let processName = newProcesses[key]
             let runningKind = processName.flatMap(Self.agentKind(forProcessName:))
             if runningKind == nil, Self.isBenignShellProcessName(processName) {
-                paneAgentState.removeValue(forKey: key)
+                // Only clear once the pane is genuinely idle. A live agent
+                // that shells out to a tool briefly foregrounds bash/zsh/sh,
+                // and clearing then would drop the session mid-turn (the next
+                // hook would have to rebuild it, flickering the icon). An
+                // unread .justCompleted/.failed badge — e.g. Claude's sticky
+                // StopFailure after the CLI exits to a shell — must also
+                // survive until the user acknowledges it.
+                if state.status == .idle {
+                    paneAgentState.removeValue(forKey: key)
+                }
                 continue
             }
             guard let runningKind else { continue }
