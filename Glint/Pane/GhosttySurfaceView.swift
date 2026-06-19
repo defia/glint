@@ -1604,8 +1604,13 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// thread only (ghostty surface APIs are not thread-safe).
     func injectText(_ text: String) {
         guard let s = surface, !text.isEmpty else { return }
+        // UTF-8 length, not strlen: a control-socket payload can carry an
+        // embedded NUL (a literal NUL byte), and strlen would truncate the paste at
+        // it. withCString's buffer is exactly utf8.count bytes + a NUL, so
+        // passing utf8.count never overreads. Mirrors injectKey's char branch.
+        let n = text.utf8.count
         text.withCString { ptr in
-            ghostty_surface_text(s, ptr, UInt(strlen(ptr)))
+            ghostty_surface_text(s, ptr, UInt(n))
         }
     }
 
