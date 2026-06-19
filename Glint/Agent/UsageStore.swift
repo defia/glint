@@ -22,6 +22,27 @@ struct AgentQuota: Equatable, Codable {
     /// genuinely tight budgets draw the eye.
     static let warnThreshold: Double = 80
     var sessionIsWarn: Bool { sessionPercent >= Self.warnThreshold }
+
+    /// Reject a snapshot whose core reading is non-finite, and null out any
+    /// non-finite secondary field. `Int(Double.nan)` (and `Int` of ±Inf) is a
+    /// hard crash in the renderer, and because the usage toggle is sticky a bad
+    /// persisted snapshot replays on every launch — bricking the app until the
+    /// user clears the pref. Returns nil when the session percent itself is
+    /// unusable, so the row simply doesn't render instead of crashing.
+    func sanitized() -> AgentQuota? {
+        guard sessionPercent.isFinite else { return nil }
+        func finite(_ v: Double?) -> Double? { v.flatMap { $0.isFinite ? $0 : nil } }
+        func finite(_ d: Date?) -> Date? {
+            d.flatMap { $0.timeIntervalSinceReferenceDate.isFinite ? $0 : nil }
+        }
+        return AgentQuota(
+            sessionPercent: sessionPercent,
+            weeklyPercent: finite(weeklyPercent),
+            sessionResetsAt: finite(sessionResetsAt),
+            weeklyResetsAt: finite(weeklyResetsAt),
+            planType: planType
+        )
+    }
 }
 
 /// Polls per-agent usage/rate-limit data and republishes it for the sidebar.
@@ -135,6 +156,9 @@ final class UsageStore: ObservableObject {
     /// previous numbers until real data replaces them. Disabling an agent is
     /// the only thing that clears it, and that's handled in the toggle's didSet.
     private func apply(_ quota: AgentQuota?, to agent: Agent) {
+        // Drop non-finite readings at the door so neither the published value
+        // nor the persisted snapshot can ever feed `Int(NaN)` to the renderer.
+        let quota = quota?.sanitized()
         switch agent {
         case .claude:
             guard claudeEnabled else { return }
@@ -171,7 +195,7 @@ final class UsageStore: ObservableObject {
         let key = snapshotKey(agent)
         if let data = UserDefaults.standard.data(forKey: key),
            let quota = try? JSONDecoder().decode(AgentQuota.self, from: data) {
-            return quota
+            return quota.sanitized()
         }
         #if DEBUG
         // Fall back to prod's snapshot: two processes polling the anthropic
@@ -182,7 +206,7 @@ final class UsageStore: ObservableObject {
         if let prodDomain = UserDefaults.standard.persistentDomain(forName: "app.glint.Glint"),
            let data = prodDomain[key] as? Data,
            let quota = try? JSONDecoder().decode(AgentQuota.self, from: data) {
-            return quota
+            return quota.sanitized()
         }
         #endif
         return nil

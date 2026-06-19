@@ -450,13 +450,21 @@ private struct QuotaColumn: View {
     /// Non-nil → tint the percent + reset readout (approaching the limit).
     let warn: Color?
 
+    /// Last line of defence against a non-finite percent reaching `Int(_:)`
+    /// (a hard crash) — the store sanitizes upstream, but the renderer must
+    /// never trust it. A NaN/Inf reading degrades to the muted "—" track.
+    private var safePercent: Double? {
+        guard let percent, percent.isFinite else { return nil }
+        return percent
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 Text(kind)
                     .foregroundStyle(Color(red: 0.365, green: 0.380, blue: 0.459)) // #5D6175
                 Spacer(minLength: 2)
-                if let percent {
+                if let percent = safePercent {
                     Text("\(Int(percent.rounded()))%")
                         .fontWeight(.semibold)
                         .foregroundStyle(warn ?? Theme.text2)
@@ -475,7 +483,7 @@ private struct QuotaColumn: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.white.opacity(0.09))
                     Capsule().fill(warn ?? fill)
-                        .frame(width: geo.size.width * CGFloat(min(max((percent ?? 0) / 100, 0), 1)))
+                        .frame(width: geo.size.width * CGFloat(min(max((safePercent ?? 0) / 100, 0), 1)))
                 }
             }
             .frame(height: 4)
@@ -485,8 +493,14 @@ private struct QuotaColumn: View {
     /// Compact "time until reset": `6d8h` ≥1 day, `2h14m` ≥1 hour, else `48m`.
     private var resetText: String? {
         guard let resetsAt else { return nil }
-        let secs = Int(resetsAt.timeIntervalSince(now))
-        guard secs > 0 else { return "now" }
+        let interval = resetsAt.timeIntervalSince(now)
+        guard interval.isFinite else { return nil }
+        guard interval > 0 else { return "now" }
+        // Clamp before the Int cast: an absurd-but-finite reset timestamp would
+        // otherwise overflow `Int(_:)` and crash, same failure mode as the percent.
+        // Bound well inside Int's range (Double(Int.max) rounds to 2^63, which
+        // is itself untrappable-into-Int) — 1e12 s is ~31,000 years, plenty.
+        let secs = Int(min(interval, 1e12))
         let d = secs / 86_400
         let h = (secs % 86_400) / 3_600
         let m = (secs % 3_600) / 60
