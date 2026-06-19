@@ -2047,6 +2047,65 @@ extension WorkspaceStore {
         return best
     }
 
+    /// One non-idle agent pane, for the per-pane summary cluster + hover
+    /// popover. `number` is the pane's 1-based position in visual layout
+    /// (left→right, tab order) so it stays stable as statuses change; the
+    /// array itself is sorted by attention rank for display.
+    struct AgentPaneInfo: Identifiable, Equatable {
+        let paneID: PaneID
+        let number: Int
+        /// The pane's tab display name — same label its tab chip shows — so
+        /// the popover reads like the tabs do rather than "Pane 1/2".
+        let label: String
+        let kind: PaneAgentKind
+        let status: PaneAgentStatus
+        /// Turn start — drives the "2m" elapsed label (total turn time).
+        let since: Date
+        var id: PaneID { paneID }
+    }
+
+    /// Per-pane breakdown over an ordered (pane, label) list. The order
+    /// defines the 1-based numbering; the result keeps only non-idle agent
+    /// panes (the ones with a colored beacon) and is sorted by attention
+    /// rank, then most-recently-updated — same precedence as the icon merge.
+    private func agentPaneBreakdown(ordered: [(pane: PaneID, label: String)],
+                                    workspaceID: UUID) -> [AgentPaneInfo] {
+        var out: [(info: AgentPaneInfo, updatedAt: Date)] = []
+        for (idx, item) in ordered.enumerated() {
+            let key = WorkspacePaneKey(workspace: workspaceID, pane: item.pane)
+            guard let e = paneAgentState[key], e.status != .idle else { continue }
+            out.append((AgentPaneInfo(paneID: item.pane, number: idx + 1,
+                                      label: item.label, kind: e.kind,
+                                      status: e.status, since: e.turnStartedAt),
+                        e.updatedAt))
+        }
+        out.sort {
+            let (ra, rb) = (statusRank($0.info.status), statusRank($1.info.status))
+            if ra != rb { return ra > rb }
+            return $0.updatedAt > $1.updatedAt
+        }
+        return out.map(\.info)
+    }
+
+    /// Non-idle agent panes in a single tab, numbered left→right within the
+    /// tab and sorted by attention rank. Drives the tab chip's cluster +
+    /// hover popover.
+    func tabPaneSummary(_ tab: WorkspaceTab, in workspace: Workspace) -> [AgentPaneInfo] {
+        let label = workspace.tabDisplayName(tab)
+        return agentPaneBreakdown(ordered: tab.root.leaves.map { ($0, label) },
+                                  workspaceID: workspace.id)
+    }
+
+    /// Non-idle agent panes across a whole workspace, numbered in tab order
+    /// (left→right within each tab), each labelled with its own tab's name.
+    /// Drives the sidebar card + switcher row.
+    func workspacePaneSummary(_ workspace: Workspace) -> [AgentPaneInfo] {
+        let ordered = workspace.tabs.flatMap { tab in
+            tab.root.leaves.map { ($0, workspace.tabDisplayName(tab)) }
+        }
+        return agentPaneBreakdown(ordered: ordered, workspaceID: workspace.id)
+    }
+
     /// A turn is actively running in these states — used to anchor the turn
     /// clock (set on the first non-busy → busy transition, kept through the
     /// turn). `.justCompleted`/`.failed`/`.idle` are turn-end / no-turn.

@@ -592,6 +592,10 @@ private struct WorkspaceCard: View {
         let active = store.selectedWorkspaceID == ws.id
         let summary = store.agentSummary(for: ws)
         let status = summary?.status
+        // Per-pane cluster + hover popover only when more than one agent runs
+        // here — a single agent's status is already on the icon + secondary row.
+        let allPanes = store.workspacePaneSummary(ws)
+        let multiInfos = allPanes.count >= 2 ? allPanes : []
         HStack(alignment: .center, spacing: 10) {
             // Purely decorative for VoiceOver — the icon (incl. mascot GIF
             // and status dot) repeats what label/value below already say.
@@ -625,7 +629,11 @@ private struct WorkspaceCard: View {
                 }
                 secondaryRow(summary: summary, active: active)
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: 4)
+            if !multiInfos.isEmpty {
+                AgentStatusCluster(infos: multiInfos)
+                    .accessibilityHidden(true)
+            }
         }
         .padding(8)
         .background(cardBackground(active: active))
@@ -652,6 +660,7 @@ private struct WorkspaceCard: View {
                 radius: isHovered ? 6 : 0,
                 y: isHovered ? 2 : 0)
         .animation(.easeOut(duration: 0.16), value: isHovered)
+        .paneSummaryPopover(multiInfos, store: store, arrowEdge: .trailing)
         .onHover { hovering in
             isHovered = hovering && !isEditing
         }

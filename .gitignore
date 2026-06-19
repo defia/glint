@@ -43,3 +43,14 @@ _design/
 # Local-only docs drafts (proposals, integration notes). Already-tracked
 # docs like external-pane-control.md are unaffected — ignore never untracks.
 docs/*.md
+
+# Local-only marketing / social assets (cover shots, WeChat & 小红书 cards).
+# Generated for promo, not part of the app or release.
+cover-shot.png
+glint-cover.html
+glint-wechat.html
+glint-xhs-cards.html
+xhs-card-*.png
+
+# Local-only design scratch (HTML approach prototypes, not part of the app).
+_design-prototypes/

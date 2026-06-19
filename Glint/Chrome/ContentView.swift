@@ -438,11 +438,15 @@ private struct TabChip: View {
     @State private var hovering = false
     @State private var isEditing = false
     @State private var draftName = ""
+    /// True while this chip is mid reorder-drag — suppresses the per-pane
+    /// hover popover so its transient window can't eat the drag's mouse-down.
+    @State private var reordering = false
     @FocusState private var nameFieldFocused: Bool
 
     var body: some View {
         let kind = store.tabIconKind(tab, in: ws)
         let status = store.tabAgentStatus(tab, in: ws)
+        let paneInfos = store.tabPaneSummary(tab, in: ws)
         HStack(spacing: 4) {
             TabIcon(kind: kind, size: 18, status: status)
                 // Unselected tabs recede to bare dimmed text+icon in the
@@ -475,7 +479,7 @@ private struct TabChip: View {
                     .truncationMode(.middle)
                     .frame(maxWidth: 150)
             }
-            trailingSlot(status: status)
+            trailingSlot(status: status, infos: paneInfos)
         }
         .padding(.leading, 4)
         .padding(.trailing, 5)
@@ -519,7 +523,14 @@ private struct TabChip: View {
             if !isEditing { store.selectTab(tab.id) }
         }
         .onHover { hovering = $0 && !isEditing }
-        .help(ws.tabHelpText(tab))
+        // One hover affordance at a time: the per-pane glass popover when
+        // agents are live, otherwise the plain cwd/name tooltip.
+        // The per-pane glass popover only earns its keep with 2+ agents; a
+        // single agent's status is already on the chip's one dot, so fall
+        // back to the plain cwd tooltip (and don't fight the drag gesture).
+        .help(paneInfos.count >= 2 ? "" : ws.tabHelpText(tab))
+        .paneSummaryPopover(paneInfos.count >= 2 ? paneInfos : [], store: store,
+                            suppressed: isDragging || reordering)
         .contextMenu {
             Button("Rename") { startEditing() }
         }
@@ -537,8 +548,14 @@ private struct TabChip: View {
         // clicks still select.
         .gesture(
             DragGesture(minimumDistance: 6, coordinateSpace: .named(kTabReorderSpace))
-                .onChanged { value in onReorderChange(value.location.x) }
-                .onEnded { _ in onReorderEnd() }
+                .onChanged { value in
+                    if !reordering { reordering = true }
+                    onReorderChange(value.location.x)
+                }
+                .onEnded { _ in
+                    reordering = false
+                    onReorderEnd()
+                }
         )
     }
 
@@ -569,10 +586,13 @@ private struct TabChip: View {
         return .clear
     }
 
-    /// Fixed-width trailing slot so the chip doesn't resize when the close
-    /// button replaces the status dot on hover.
+    /// Trailing slot: a per-pane status-dot cluster at rest (one dot per live
+    /// agent pane, capped at 3), swapped for the close (×) on hover. The slot
+    /// width grows to fit the cluster so the chip doesn't jump on hover.
     @ViewBuilder
-    private func trailingSlot(status: PaneAgentStatus?) -> some View {
+    private func trailingSlot(status: PaneAgentStatus?, infos: [WorkspaceStore.AgentPaneInfo]) -> some View {
+        let dots = min(infos.count, 3)
+        let clusterW = dots <= 1 ? 15 : CGFloat(dots) * 6 + CGFloat(dots - 1) * 3
         ZStack {
             if hovering {
                 Button { store.closeTab(tab.id) } label: {
@@ -587,11 +607,11 @@ private struct TabChip: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(isActive ? Theme.text2 : Theme.text3)
-            } else if let status, status != .idle {
-                AgentStatusBeacon(status: status)
+            } else if !infos.isEmpty {
+                AgentStatusCluster(infos: infos)
             }
         }
-        .frame(width: 15, height: 15)
+        .frame(width: max(15, clusterW), height: 15)
     }
 }
 
@@ -605,6 +625,9 @@ private struct TabChip: View {
 struct AgentStatusBeacon: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let status: PaneAgentStatus
+    /// Dot diameter — the tab chip / sidebar use the default 7pt; the
+    /// per-pane cluster packs slightly smaller 6pt dots.
+    var size: CGFloat = 7
 
     var body: some View {
         StatusBeaconDot(
@@ -613,7 +636,7 @@ struct AgentStatusBeacon: View {
             pulsing: !reduceMotion && Self.pulses(status),
             fast: status == .compacting
         )
-        .frame(width: 7, height: 7)
+        .frame(width: size, height: size)
     }
 
     /// Mirrors AgentStatusDot.needsPulse: anything that wants the user's
@@ -747,7 +770,7 @@ private struct StatusBeaconDot: NSViewRepresentable {
 /// which is visually identical to the old static mark and costs nothing per
 /// frame — only running tabs animate. Falls back to an SF Symbol / glyph for
 /// plain shells and other tools.
-private struct TabIcon: View {
+struct TabIcon: View {
     @EnvironmentObject var store: WorkspaceStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let kind: WorkspaceIconKind
@@ -965,27 +988,35 @@ private struct TabOverflowRow: View {
 
     var body: some View {
         let status = store.tabAgentStatus(tab, in: ws)
+        let infos = store.tabPaneSummary(tab, in: ws)
         Button(action: onSelect) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.white.opacity(0.06))
-                    TabIcon(kind: store.tabIconKind(tab, in: ws), size: 15, status: status)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white.opacity(0.06))
+                        TabIcon(kind: store.tabIconKind(tab, in: ws), size: 15, status: status)
+                    }
+                    .frame(width: 24, height: 24)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(ws.tabDisplayName(tab))
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(hover ? Theme.text1 : Theme.text2)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text(secondaryText(status))
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(status.flatMap(secondaryColor) ?? Theme.text4)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    trailingSlot(status: status, infos: infos)
                 }
-                .frame(width: 24, height: 24)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(ws.tabDisplayName(tab))
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(hover ? Theme.text1 : Theme.text2)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Text(secondaryText(status))
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(status.flatMap(secondaryColor) ?? Theme.text4)
-                        .lineLimit(1)
+                // Hover expands the per-pane detail inline — a nested popover
+                // inside this dropdown would be fragile.
+                if hover && !infos.isEmpty {
+                    PaneSummaryInlineRows(infos: infos)
                 }
-                Spacer(minLength: 4)
-                trailingSlot(status: status)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
@@ -1003,7 +1034,9 @@ private struct TabOverflowRow: View {
     /// Fixed-size slot mirroring TabChip's: status dot at rest, close (×)
     /// on hover, so rows don't shift as the pointer moves down the list.
     @ViewBuilder
-    private func trailingSlot(status: PaneAgentStatus?) -> some View {
+    private func trailingSlot(status: PaneAgentStatus?, infos: [WorkspaceStore.AgentPaneInfo]) -> some View {
+        let dots = min(infos.count, 3)
+        let clusterW = dots <= 1 ? 16 : CGFloat(dots) * 6 + CGFloat(dots - 1) * 3
         ZStack {
             if hover {
                 Button { store.closeTab(tab.id) } label: {
@@ -1018,11 +1051,11 @@ private struct TabOverflowRow: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.text3)
-            } else if let status, status != .idle {
-                AgentStatusBeacon(status: status)
+            } else if !infos.isEmpty {
+                AgentStatusCluster(infos: infos)
             }
         }
-        .frame(width: 16, height: 16)
+        .frame(width: max(16, clusterW), height: 16)
     }
 
     /// Same vocabulary as the workspace switcher rows: a live status phrase
@@ -1370,27 +1403,35 @@ private struct WorkspaceSwitcherRow: View {
     var body: some View {
         let kind = store.iconKind(for: ws)
         let summary = store.agentSummary(for: ws)
+        let infos = store.workspacePaneSummary(ws)
         Button(action: onSelect) {
-            HStack(spacing: 10) {
-                WorkspaceMicroIcon(ws: ws, kind: kind, size: 26)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(ws.displayName)
-                        .font(.system(size: 13,
-                                      weight: isCurrent ? .semibold : .medium))
-                        .foregroundStyle(isCurrent ? Theme.text1 : Theme.text2)
-                        .italic(!ws.userNamed)
-                        .lineLimit(1)
-                    Text(secondaryText(summary: summary))
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(
-                            (summary?.status).flatMap(secondaryColor)
-                                ?? Theme.text4
-                        )
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 10) {
+                    WorkspaceMicroIcon(ws: ws, kind: kind, size: 26)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(ws.displayName)
+                            .font(.system(size: 13,
+                                          weight: isCurrent ? .semibold : .medium))
+                            .foregroundStyle(isCurrent ? Theme.text1 : Theme.text2)
+                            .italic(!ws.userNamed)
+                            .lineLimit(1)
+                        Text(secondaryText(summary: summary))
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(
+                                (summary?.status).flatMap(secondaryColor)
+                                    ?? Theme.text4
+                            )
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer(minLength: 4)
+                    trailingBadge(summary: summary, infos: infos)
                 }
-                Spacer(minLength: 4)
-                trailingBadge(summary: summary)
+                // Hover expands per-pane detail inline (nested popover inside
+                // this switcher dropdown would be fragile).
+                if hover && infos.count >= 2 {
+                    PaneSummaryInlineRows(infos: infos, indent: 36)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
@@ -1402,19 +1443,20 @@ private struct WorkspaceSwitcherRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.12), value: hover)
     }
 
     @ViewBuilder
-    private func trailingBadge(summary: (status: PaneAgentStatus, since: Date)?) -> some View {
+    private func trailingBadge(summary: (status: PaneAgentStatus, since: Date)?,
+                               infos: [WorkspaceStore.AgentPaneInfo]) -> some View {
         if isCurrent {
             Image(systemName: "checkmark")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(store.accent)
-        } else if let s = summary?.status, s != .idle {
-            Circle()
-                .fill(statusDotColor(s))
-                .frame(width: 7, height: 7)
-                .shadow(color: statusDotColor(s).opacity(0.6), radius: 3)
+        } else if !infos.isEmpty {
+            // One dot per live agent pane (capped at 3) — same glance layer
+            // the tab chip uses.
+            AgentStatusCluster(infos: infos)
         }
     }
 
