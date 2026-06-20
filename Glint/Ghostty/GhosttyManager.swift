@@ -83,6 +83,67 @@ final class GhosttyManager {
         ghostty_app_set_color_scheme(app, scheme)
     }
 
+    // MARK: transparency
+
+    /// True when the user dialed terminal opacity below 1.0. Drives the AppKit
+    /// side of transparency: the surface NSView, its backing layer, and the
+    /// hosting container must all go non-opaque / clear so ghostty's own
+    /// `background-opacity` (baked into the config) actually shows the desktop.
+    /// (The Metal renderer already produces an alpha IOSurface; without these
+    /// AppKit signals the compositor still draws an opaque backing behind it.)
+    var terminalIsTransparent: Bool {
+        let o = (UserDefaults.standard.object(forKey: "glint.terminalOpacity") as? Double) ?? 1.0
+        return o < 1.0
+    }
+
+    /// Opaque flash-guard color for the surface/container layer in the NON
+    /// transparent case — matches the active theme's terminal background so a
+    /// freshly-minted pane doesn't flash before its first frame. Direct
+    /// `NSColor(Color)` bridge (as used elsewhere, e.g. `NSColor(store.accent)`)
+    /// — no Color→hex-string→UInt32→NSColor round-trip on this layer-backing
+    /// path that `isOpaque`/`updateNSView` hit frequently.
+    var currentBackgroundColor: NSColor {
+        NSColor(ThemeProvider.shared.current.background)
+    }
+
+    /// Stamp the opaque/clear backing onto a layer behind (or hosting) the
+    /// terminal surface. Single implementation shared by the surface view's
+    /// IOSurfaceLayer and the pane container so the two can't diverge — clear +
+    /// non-opaque when translucent, theme-bg + opaque otherwise.
+    func applyTerminalBacking(to layer: CALayer?) {
+        guard let layer else { return }
+        let transparent = terminalIsTransparent
+        layer.isOpaque = !transparent
+        layer.backgroundColor = transparent ? NSColor.clear.cgColor
+                                            : currentBackgroundColor.cgColor
+    }
+
+    /// Ask ghostty to install the NSVisualEffectView-backed window blur. This
+    /// is a host responsibility in the embedded apprt — ghostty exports the
+    /// call but never invokes it for us. Only meaningful when the terminal is
+    /// translucent and a blur radius is set.
+    func applyWindowEffects() {
+        guard let app else { return }
+        let blur = (UserDefaults.standard.object(forKey: "glint.backgroundBlur") as? Double) ?? 0
+        guard terminalIsTransparent, blur > 0 else { return }
+        for window in NSApp.windows {
+            ghostty_set_window_background_blur(app, Unmanaged.passUnretained(window).toOpaque())
+        }
+    }
+
+    /// Drive every window's NSAppearance from the active theme so AppKit
+    /// vibrancy + Liquid Glass materials (header islands, command palette,
+    /// sidebar) resolve light/dark to MATCH the theme. Without this the window
+    /// is pinned to a hardcoded appearance, so a LIGHT theme still renders dark
+    /// frosted glass (the islands "go black") no matter what tint we pass.
+    func syncWindowAppearance() {
+        let appearance = NSAppearance(named:
+            ThemeProvider.shared.current.isDark ? .darkAqua : .aqua)
+        for window in NSApp.windows {
+            window.appearance = appearance
+        }
+    }
+
     private func tickSoon() {
         DispatchQueue.main.async { [weak self] in
             guard let app = self?.app else { return }
@@ -115,20 +176,36 @@ final class GhosttyManager {
             let v = defaults.integer(forKey: "glint.terminalScrollback")
             return v == 0 ? 10_000 : v
         }()
+        // 透明度 / 模糊(与配色正交,follow 模式也注入)。默认 1.0 / 0 = 不透明无模糊。
+        let termOpacity = (defaults.object(forKey: "glint.terminalOpacity") as? Double) ?? 1.0
+        let blurRadius = Int((((defaults.object(forKey: "glint.backgroundBlur") as? Double) ?? 0)).rounded())
 
         // Note: the per-surface `viewport-top-offset` reserves an inset above
         // the grid that the renderer paints scrollback rows up into (instead
         // of the dead-padding behavior of `window-padding-y`). It's set in
         // GhosttySurfaceView.createSurface, not here, because only the
         // top-aligned pane needs the inset; split children don't.
+        // 配色来自当前主题(§3.2);cursor/selection 仍由 accentName 驱动(accent 可覆盖主题默认)。
+        // 布局(font/padding/cursor-style/scrollback)与主题正交,始终注入。
+        // follow-ghostty 主题跳过配色块 → 终端配色交回用户的 ghostty config(字体仍由 Glint 注入)。
+        let theme = ThemeProvider.shared.current
+        var colorBlock = ""
+        if theme.id != "follow-ghostty" {
+            colorBlock = """
+            background = \(theme.background.rgbHex)
+            foreground = \(theme.foreground.rgbHex)
+            cursor-color = \(accentHex)
+            selection-background = \(accentHex)
+            selection-foreground = \(theme.foreground.rgbHex)
+            """
+            for (i, c) in theme.palette.enumerated() {
+                colorBlock += "\npalette = \(i)=#\(c.rgbHex)"
+            }
+            colorBlock += "\n"
+        }
         let overrides = """
-        background = 0B0A14
-        foreground = ECEDF2
-        cursor-color = \(accentHex)
-        cursor-style = \(cursorStyle)
+        \(colorBlock)cursor-style = \(cursorStyle)
         cursor-style-blink = \(cursorBlink)
-        selection-background = \(accentHex)
-        selection-foreground = ECEDF2
         font-family = \(family)
         font-family = Menlo
         font-size = \(size)
@@ -138,6 +215,8 @@ final class GhosttyManager {
         window-padding-balance = true
         adjust-cell-height = 10%
         macos-titlebar-style = hidden
+        background-opacity = \(termOpacity)
+        background-blur = \(blurRadius)
         """
         let source = "glint-inline"
         overrides.withCString { ovr in
@@ -189,6 +268,12 @@ final class GhosttyManager {
         applyGlintTheme(newCfg)
         ghostty_config_finalize(newCfg)
         ghostty_app_update_config(app, newCfg)
+        // Blur is a window-level effect ghostty won't (re)apply on its own —
+        // re-assert it after the config swap so toggling opacity/blur live
+        // takes hold without a relaunch.
+        DispatchQueue.main.async { [weak self] in
+            self?.applyWindowEffects()
+        }
         // ghostty takes the config from here. We keep a reference for parity
         // with bootstrap; we don't free the previous one because ghostty may
         // still be holding it during in-flight reload propagation. The few

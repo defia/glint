@@ -14,11 +14,19 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> NoDragContainerView {
         let container = NoDragContainerView()
         container.wantsLayer = true
+        Self.updateContainerBacking(container)
+        surfaceView.refreshAppearanceBacking()
         attach(surfaceView, to: container)
         return container
     }
 
     func updateNSView(_ nsView: NoDragContainerView, context: Context) {
+        // SwiftUI re-runs this ~1/s (sidebar TimelineView), so it doubles as
+        // the live-refresh path for opacity changes: re-stamp the container and
+        // surface backing every pass so dragging the opacity slider flips the
+        // compositor without a relaunch.
+        Self.updateContainerBacking(nsView)
+        surfaceView.refreshAppearanceBacking()
         if surfaceView.superview !== nsView {
             attach(surfaceView, to: nsView)
         }
@@ -89,6 +97,15 @@ struct PaneSurfaceRepresentable: NSViewRepresentable {
                 options: [.alignAllEdgesNearest]
             ).size
         }
+    }
+
+    /// Mirror the surface's opaque/clear backing onto the hosting container.
+    /// The container's own layer would otherwise paint an opaque fill behind
+    /// the surface and block the desktop even when the surface itself is clear.
+    /// Shares the single implementation in `GhosttyManager` so it can't drift
+    /// from the surface view's own backing.
+    private static func updateContainerBacking(_ container: NoDragContainerView) {
+        GhosttyManager.shared.applyTerminalBacking(to: container.layer)
     }
 
     private func attach(_ surface: GhosttySurfaceView, to container: NoDragContainerView) {

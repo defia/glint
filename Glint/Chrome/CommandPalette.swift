@@ -17,18 +17,24 @@ struct CommandPalette: View {
     @State private var selectionSource: SelectionSource = .keyboard
 
     var body: some View {
+        // The dim backdrop + click-out catcher lives in ContentView as a
+        // separate overlay so it can fade independently of this panel's
+        // scale/offset entrance. This ZStack only centers the panel.
         ZStack {
-            // Click-out catcher
-            Color.black.opacity(0.32)
-                .ignoresSafeArea()
-                .onTapGesture { close() }
-
             VStack(spacing: 0) {
                 searchField
                 Divider().opacity(0.4)
                 resultList
             }
             .frame(width: 520, height: 420)
+            // Light themes: the frosted glass over a translucent terminal reads
+            // as a muddy mid-grey. A light bgPane scrim (≈white in a light
+            // theme) firms it into a clean card. Dark stays clear so the glass
+            // look is untouched.
+            .background(
+                (Theme.current.isDark ? Color.clear : Theme.bgPane.opacity(0.55))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            )
             // Liquid Glass panel on macOS 26 — the palette floats over the
             // terminal in the same window, exactly the layering glass is
             // built to refract. Glass draws its own rim light, so the manual
@@ -48,7 +54,7 @@ struct CommandPalette: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                        .strokeBorder(Theme.overlay(0.08), lineWidth: 0.5)
                 )
             }
             .shadow(color: Color.black.opacity(0.5), radius: 30, y: 12)
@@ -87,12 +93,12 @@ struct CommandPalette: View {
                 }
             Text("ESC")
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(Theme.text4)
+                .foregroundStyle(Theme.text3)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1.5)
                 .background(
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.white.opacity(0.05))
+                        .fill(Theme.overlay(0.08))
                 )
         }
         .padding(.horizontal, 16)
@@ -308,7 +314,7 @@ private struct PaletteRow: View {
                         ? Text(verbatim: s)
                         : Text(LocalizedStringKey(s)))
                         .font(.system(size: 11))
-                        .foregroundStyle(Theme.text4)
+                        .foregroundStyle(Theme.text3)
                         .lineLimit(1)
                 }
             }
@@ -319,7 +325,7 @@ private struct PaletteRow: View {
         .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(selected ? Color.white.opacity(0.10) : Color.clear)
+                .fill(selected ? Theme.overlay(0.10) : Color.clear)
         )
         .overlay(alignment: .leading) {
             if selected {
@@ -368,13 +374,24 @@ private struct PaletteRow: View {
                 .padding(.vertical, 1.5)
                 .background(
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.white.opacity(0.06))
+                        .fill(Theme.overlay(0.06))
                 )
+        case .kind(let label) where label == "CURRENT":
+            // The single most important affordance in the list — render it as a
+            // real accent badge so it stays legible on a light panel (text4 was
+            // a near-invisible light grey there).
+            Text(LocalizedStringKey(label))
+                .font(.system(size: 9.5, weight: .bold))
+                .kerning(0.6)
+                .foregroundStyle(store.accent)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(store.accent.opacity(0.16)))
         case .kind(let label):
             Text(LocalizedStringKey(label))
                 .font(.system(size: 10, weight: .semibold))
                 .kerning(0.6)
-                .foregroundStyle(Theme.text4)
+                .foregroundStyle(Theme.text3)
         default:
             EmptyView()
         }

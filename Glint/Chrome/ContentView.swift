@@ -21,9 +21,9 @@ struct ContentView: View {
                 // glass has nothing to refract and reads as a gray slab.)
                 SidebarView()
                     .frame(width: 244)
-                    .background(Theme.bgPane)
+                    .background(Theme.bgPane.opacity(store.chromeOpacity))
                     .overlay(alignment: .trailing) {
-                        Rectangle().fill(Color.white.opacity(0.045)).frame(width: 1)
+                        Rectangle().fill(Theme.divider).frame(width: 1)
                     }
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
@@ -39,21 +39,55 @@ struct ContentView: View {
                     // islands by the padded shell launcher (see
                     // GhosttyManager.paddedShellLauncherPath), not by
                     // insetting the layout.
-                    .background(Theme.bgPane)
             }
-            .background(Theme.bgPane)
+            // Flash-guard ONLY. ghostty's surface paints its own background at
+            // `background-opacity` (= terminalOpacity), so when transparency is
+            // on this layer MUST be fully clear — otherwise it stacks a second
+            // near-opaque fill behind the already-alpha'd surface and the net
+            // result is opaque (0.84 × 0.84 ≈ 0.97). At full opacity we keep
+            // bgPane so a freshly-created pane doesn't flash the desktop before
+            // its first frame lands.
+            .background(store.isTerminalTransparent ? Color.clear : Theme.bgPane)
             // Floating mode: the terminal owns the full height and the
             // toolbar's glass islands ride on top of it. The strip itself
             // is an invisible window-drag handle (see ToolbarHeader).
             .overlay(alignment: .top) {
                 if floatingHeader {
                     ToolbarHeader()
+                        // Semi-transparent theme-color scrim behind the
+                        // floating islands. The fork scrolls real (sometimes
+                        // stale, dark-themed) scrollback up into the strip
+                        // under the header; without a scrim that reads as a
+                        // harsh black band on a light theme. A 0.6 theme-bg
+                        // wash pulls whatever is back there toward the current
+                        // theme while keeping a hint of see-through.
+                        .background(
+                            Theme.bgPane.opacity(0.6)
+                                .ignoresSafeArea(edges: .top)
+                        )
                 }
             }
         }
         .ignoresSafeArea()
-        .background(Theme.bgWindow)
+        // Root stays clear so the sidebar and terminal each own their backing
+        // layer — that's what lets the two opacity sliders act independently
+        // (a single opaque root fill would block the terminal from showing the
+        // desktop). bgWindow's faint darkening is folded into each child now.
+        .background(Color.clear)
         .animation(.easeOut(duration: 0.18), value: store.sidebarCollapsed)
+        // Backdrop is its OWN layer with a plain fade — kept out of the panel's
+        // scale/offset transition so the full-screen dim doesn't slide up and
+        // grow with the panel (which read as a jarring "snap" from no dim to
+        // full dim). It just fades in/out under the same animation.
+        .overlay {
+            if store.commandPaletteOpen {
+                Color.black.opacity(0.32)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { store.commandPaletteOpen = false }
+                    .transition(.opacity)
+            }
+        }
         .overlay {
             if store.commandPaletteOpen {
                 CommandPalette()
@@ -119,7 +153,7 @@ struct ToolbarHeader: View {
                 if store.sidebarCollapsed {
                     if floating {
                         Rectangle()
-                            .fill(Color.white.opacity(0.10))
+                            .fill(Theme.overlay(0.10))
                             .frame(width: 1, height: 16)
                     }
                     WorkspaceSwitcher()
@@ -127,7 +161,7 @@ struct ToolbarHeader: View {
                         .transition(.opacity.combined(with: .move(edge: .leading)))
                 }
             }
-            .liquidGlass(enabled: floating, cornerRadius: 19)
+            .liquidGlass(enabled: floating, cornerRadius: 19, tint: Theme.glassTint)
             .arrowPointer()
 
             // Tabs ride in the otherwise-empty middle of the header, centered
@@ -150,7 +184,7 @@ struct ToolbarHeader: View {
             // Tahoe-style grouped toolbar cluster: the two trailing buttons
             // share one resting glass capsule (38pt tall → radius 19). Pre-26
             // or glass-off, the buttons stay bare as before.
-            .liquidGlass(enabled: store.glassEffect, cornerRadius: 19)
+            .liquidGlass(enabled: store.glassEffect, cornerRadius: 19, tint: Theme.glassTint)
             .arrowPointer()
         }
         // Traffic lights take ~78pt when sidebar is collapsed; otherwise the
@@ -193,7 +227,7 @@ struct ToolbarHeader: View {
         )
         .overlay(alignment: .bottom) {
             if !floating {
-                Rectangle().fill(Color.white.opacity(0.04)).frame(height: 1)
+                Rectangle().fill(Theme.overlay(0.04)).frame(height: 1)
             }
         }
     }
@@ -279,7 +313,7 @@ struct TabBar: View {
         // and radius as the leading/trailing islands, with the chip pills
         // (radius 15) concentric to the capsule's 19.
         .padding(glassCluster ? 4 : 0)
-        .liquidGlass(enabled: glassCluster, cornerRadius: 19)
+        .liquidGlass(enabled: glassCluster, cornerRadius: 19, tint: Theme.glassTint)
         .arrowPointer()
         .fixedSize()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -345,7 +379,7 @@ private struct NewTabButton: View {
                 .font(.system(size: 12, weight: .medium))
                 .frame(width: 26, height: 26)
                 .background(
-                    Circle().fill(Color.white.opacity(hovering ? 0.08 : 0))
+                    Circle().fill(Theme.overlay(hovering ? 0.08 : 0))
                 )
                 .contentShape(Rectangle())
         }
@@ -581,8 +615,8 @@ private struct TabChip: View {
         // Slightly translucent so the glass still refracts through the
         // accent pill.
         if isActive { return inGlassCluster ? store.accent.opacity(0.28)
-                                            : Color.white.opacity(0.08) }
-        if hovering { return Color.white.opacity(inGlassCluster ? 0.07 : 0.04) }
+                                            : Theme.overlay(0.08) }
+        if hovering { return Theme.overlay(inGlassCluster ? 0.07 : 0.04) }
         return .clear
     }
 
@@ -601,7 +635,7 @@ private struct TabChip: View {
                         .frame(width: 15, height: 15)
                         .background(
                             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(Color.white.opacity(0.001)) // keep hit area
+                                .fill(Theme.overlay(0.001)) // keep hit area
                         )
                         .contentShape(Rectangle())
                 }
@@ -867,9 +901,9 @@ private struct TabOverflowChip: View {
     private var inGlassCluster: Bool { store.glassEffect }
 
     private var capsuleFill: Color {
-        if isOpen { return Color.white.opacity(0.10) }
-        if hover  { return Color.white.opacity(0.07) }
-        return Color.white.opacity(0.04)
+        if isOpen { return Theme.overlay(0.10) }
+        if hover  { return Theme.overlay(0.07) }
+        return Theme.overlay(0.04)
     }
 }
 
@@ -898,7 +932,7 @@ private struct TabOverflowPopover: View {
             .frame(maxHeight: 320)
 
             Rectangle()
-                .fill(Color.white.opacity(0.05))
+                .fill(Theme.overlay(0.05))
                 .frame(height: 1)
 
             newTabRow
@@ -964,7 +998,7 @@ private struct TabOverflowPopover: View {
                     .padding(.vertical, 1.5)
                     .background(
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(Color.white.opacity(0.05))
+                            .fill(Theme.overlay(0.05))
                     )
             }
             .padding(.horizontal, 8)
@@ -994,7 +1028,7 @@ private struct TabOverflowRow: View {
                 HStack(spacing: 10) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white.opacity(0.06))
+                            .fill(Theme.overlay(0.06))
                         TabIcon(kind: store.tabIconKind(tab, in: ws), size: 15, status: status)
                     }
                     .frame(width: 24, height: 24)
@@ -1022,7 +1056,7 @@ private struct TabOverflowRow: View {
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(hover ? Color.white.opacity(0.05) : .clear)
+                    .fill(hover ? Theme.overlay(0.05) : .clear)
             )
             .contentShape(Rectangle())
         }
@@ -1045,7 +1079,7 @@ private struct TabOverflowRow: View {
                         .frame(width: 16, height: 16)
                         .background(
                             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(Color.white.opacity(0.06))
+                                .fill(Theme.overlay(0.06))
                         )
                         .contentShape(Rectangle())
                 }
@@ -1113,7 +1147,7 @@ private struct ToolbarIconButton: View {
                     // corners poke past the capsule's end-cap curve and
                     // read as a misaligned dark blob over the terminal.
                     Circle()
-                        .fill(Color.white.opacity(hovering ? 0.08 : 0))
+                        .fill(Theme.overlay(hovering ? 0.08 : 0))
                         .padding(2)
                 )
                 .contentShape(Rectangle())
@@ -1172,7 +1206,7 @@ private struct DevBadge: View {
             )
             .overlay(
                 Capsule(style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+                    .strokeBorder(Theme.overlay(0.18), lineWidth: 0.5)
             )
             .shadow(color: Color(red: 0.95, green: 0.30, blue: 0.55).opacity(0.35),
                     radius: 4, y: 0)
@@ -1249,7 +1283,7 @@ private struct WorkspaceSwitcher: View {
                     // its own); this well only adds hover/open feedback,
                     // inset to match the buttons' circular wells.
                     Capsule(style: .continuous)
-                        .fill(Color.white.opacity(isOpen ? 0.10 : hover ? 0.06 : 0))
+                        .fill(Theme.overlay(isOpen ? 0.10 : hover ? 0.06 : 0))
                         .padding(2)
                 } else {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -1277,12 +1311,12 @@ private struct WorkspaceSwitcher: View {
     private var glassPill: Bool { store.glassEffect }
 
     private var pillFill: Color {
-        if isOpen { return Color.white.opacity(0.10) }
-        if hover  { return Color.white.opacity(0.07) }
-        return Color.white.opacity(0.04)
+        if isOpen { return Theme.overlay(0.10) }
+        if hover  { return Theme.overlay(0.07) }
+        return Theme.overlay(0.04)
     }
     private var pillStroke: Color {
-        isOpen ? Color.white.opacity(0.14) : Color.white.opacity(0.06)
+        isOpen ? Theme.overlay(0.14) : Theme.overlay(0.06)
     }
 
     private var currentName: String {
@@ -1317,7 +1351,7 @@ private struct WorkspaceSwitcherPopover: View {
             .frame(maxHeight: 360)
 
             Rectangle()
-                .fill(Color.white.opacity(0.05))
+                .fill(Theme.overlay(0.05))
                 .frame(height: 1)
 
             newWorkspaceRow
@@ -1381,7 +1415,7 @@ private struct WorkspaceSwitcherPopover: View {
                     .padding(.vertical, 1.5)
                     .background(
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(Color.white.opacity(0.05))
+                            .fill(Theme.overlay(0.05))
                     )
             }
             .padding(.horizontal, 8)
@@ -1461,8 +1495,8 @@ private struct WorkspaceSwitcherRow: View {
     }
 
     private var rowBg: Color {
-        if isCurrent { return Color.white.opacity(0.08) }
-        if hover     { return Color.white.opacity(0.04) }
+        if isCurrent { return Theme.overlay(0.08) }
+        if hover     { return Theme.overlay(0.04) }
         return .clear
     }
 

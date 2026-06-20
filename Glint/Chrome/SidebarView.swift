@@ -218,7 +218,7 @@ struct SidebarView: View {
             // rows instead of a box + border.
             .background(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Color.white.opacity(newWorkspaceHovered ? 0.04 : 0))
+                    .fill(Theme.overlay(newWorkspaceHovered ? 0.04 : 0))
             )
             .contentShape(Rectangle())
         }
@@ -230,13 +230,23 @@ struct SidebarView: View {
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.text4)
-            TextField("Search", text: $searchText)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.text3)
+            TextField("", text: $searchText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
-                .foregroundStyle(Theme.text2)
+                .foregroundStyle(Theme.text1)
                 .focused($searchFocused)
+                .overlay(alignment: .leading) {
+                    // 自绘占位符:系统 placeholder 由 tertiaryLabel 渲染,亮色下偏淡
+                    // 且不可控;用 Theme.text3 让明暗两侧都清晰。
+                    if searchText.isEmpty {
+                        Text("Search")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.text3)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .onKeyPress(.escape) {
                     searchText = ""
                     searchFocused = false
@@ -258,7 +268,11 @@ struct SidebarView: View {
         .frame(height: 28)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.white.opacity(searchFocused ? 0.08 : 0.04))
+                .fill(Theme.overlay(searchFocused ? 0.09 : 0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(searchFocused ? store.accent.opacity(0.5) : Theme.border, lineWidth: 1)
+                )
         )
         // Make the entire pill hit-testable so clicking anywhere (the
         // magnifying glass, the empty padding, the trailing key hint) hands
@@ -481,7 +495,7 @@ private struct QuotaColumn: View {
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.09))
+                    Capsule().fill(Theme.overlay(0.09))
                     Capsule().fill(warn ?? fill)
                         .frame(width: geo.size.width * CGFloat(min(max((safePercent ?? 0) / 100, 0), 1)))
                 }
@@ -550,8 +564,12 @@ private struct ShortcutBadge: View {
         .foregroundStyle(Theme.text2)
         .padding(.horizontal, 5)
         .padding(.vertical, 2.5)
-        .background(Capsule().fill(Color.black.opacity(0.45)))
-        .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1))
+        // Adaptive chip: a hardcoded black fill read as a muddy dark pill on a
+        // light theme. Theme.overlay lightens on dark themes / darkens on light
+        // ones, so the badge stays a subtle recessed chip in both — matching
+        // the command-palette kbd style.
+        .background(Capsule().fill(Theme.overlay(0.10)))
+        .overlay(Capsule().stroke(Theme.overlay(0.08), lineWidth: 1))
     }
 }
 
@@ -790,11 +808,11 @@ private struct WorkspaceCard: View {
                 // holds the same visual weight as the mascots.
                 Image(systemName: sf)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(Theme.text2)
             } else {
                 Text(kind.letter)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(Theme.text2)
             }
         }
         .frame(width: 28, height: 28)
@@ -875,11 +893,11 @@ private struct WorkspaceCard: View {
         .padding(.vertical, 2)
         .background(
             Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.12))
+                .fill(Theme.overlay(0.12))
         )
         .overlay(
             Capsule(style: .continuous)
-                .stroke(Color.white.opacity(0.16), lineWidth: 0.5)
+                .stroke(Theme.overlay(0.16), lineWidth: 0.5)
         )
     }
 
@@ -903,7 +921,7 @@ private struct WorkspaceCard: View {
             .padding(.vertical, 2)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color.white.opacity(active ? 0.10 : 0.06))
+                    .fill(Theme.overlay(active ? 0.10 : 0.06))
             )
     }
 
@@ -956,7 +974,7 @@ private struct WorkspaceCard: View {
             // the list reads as rows on one shared surface, not a stack of
             // boxes.
             if active { return store.accent.opacity(0.16) }
-            if isHovered { return Color.white.opacity(0.04) }
+            if isHovered { return Theme.overlay(0.04) }
             return .clear
         }()
         return RoundedRectangle(cornerRadius: 9, style: .continuous)

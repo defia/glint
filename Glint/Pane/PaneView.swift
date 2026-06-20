@@ -8,6 +8,14 @@ struct PaneView: View {
     let workspaceID: UUID?
     let paneID: PaneID
 
+    /// When the terminal is translucent every SwiftUI fill behind the surface
+    /// must be clear — an opaque `Theme.bgPane` here sits *between* the alpha
+    /// IOSurface and the clear window and re-opacifies the pane (the original
+    /// "终端没透" bug). At full opacity we keep bgPane as a flash-guard.
+    private var paneBacking: Color {
+        store.isTerminalTransparent ? Color.clear : Theme.bgPane
+    }
+
     var body: some View {
         // Resolve a surface only for a (workspace, pane) pair that exists in
         // the model. A miss means we're either mid-teardown (workspace
@@ -21,7 +29,7 @@ struct PaneView: View {
                      focusedPane: ws.selectedTab?.focusedPane ?? paneID,
                      cwd: pane.workingDirectory)
         } else {
-            Theme.bgPane
+            paneBacking
         }
     }
 
@@ -33,13 +41,18 @@ struct PaneView: View {
         }
         let isFocused = focusedPane == paneID
         return ZStack {
-            Theme.bgPane
+            paneBacking
             PaneSurfaceRepresentable(
                 surfaceView: store.surfaceView(workspaceID: workspaceID, paneID: paneID, cwd: cwd),
                 focused: isFocused
             )
             if !isFocused {
-                Theme.bgPane.opacity(0.45)
+                // Dim unfocused panes with a black wash in BOTH modes. A
+                // `Theme.bgPane` veil would re-opacify the desktop in
+                // translucent mode, and on a LIGHT theme bgPane (≈white) would
+                // wash the pane lighter instead of dimming it — a black wash
+                // de-emphasizes correctly regardless of theme/opacity.
+                Color.black.opacity(store.isTerminalTransparent ? 0.18 : 0.28)
                     .allowsHitTesting(false)
             }
         }

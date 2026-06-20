@@ -2,29 +2,32 @@ import SwiftUI
 import AppKit
 
 enum Theme {
+    // chrome 中性色现在从「当前主题」取(见 docs/theme-system-design.md §3.1)。
+    // 值由 ThemeProvider.current 提供;glint-dark 用 override 1:1 锁定下面注释里的
+    // 原始色值,故接入后视觉零变化。注:computed 不被 SwiftUI 自动 observe,主题切换
+    // 时由 WorkspaceStore.themeRevision 触发整树重建来刷新(第 3 步接)。
+    static var current: GlintTheme { ThemeProvider.shared.current }
+
     // backgrounds
-    static let bgWindow   = Color(red: 0.039, green: 0.043, blue: 0.063)   // #0A0B10
-    static let bgPane     = Color(red: 0.043, green: 0.039, blue: 0.078)   // #0B0A14 (slight indigo)
+    static var bgWindow: Color { current.bgWindow }   // 原 #0A0B10
+    static var bgPane:   Color { current.bgPane }     // 原 #0B0A14 (slight indigo)
 
     // vibrancy tint overlays — black-first with the faintest indigo cast
-    static let sidebarTintTop    = Color(red: 0.075, green: 0.065, blue: 0.110).opacity(0.86)
-    static let sidebarTintBottom = Color(red: 0.045, green: 0.038, blue: 0.085).opacity(0.90)
-    static let toolbarTint       = Color(red: 0.060, green: 0.052, blue: 0.095).opacity(0.86)
+    static var sidebarTintTop:    Color { current.sidebarTintTop }     // 原 (.075,.065,.110)@.86
+    static var sidebarTintBottom: Color { current.sidebarTintBottom } // 原 (.045,.038,.085)@.90
+    static var toolbarTint:       Color { current.toolbarTint }       // 原 (.060,.052,.095)@.86
 
     // Liquid Glass tint (macOS 26): the sidebar indigo, but thin enough that
     // the glass still refracts the terminal behind it instead of reading as
     // a painted slab.
-    static let glassTint         = Color(red: 0.075, green: 0.065, blue: 0.110).opacity(0.5)
+    static var glassTint:         Color { current.glassTint }         // 原 (.075,.065,.110)@.50
 
     // text
-    static let text1 = Color(red: 0.925, green: 0.929, blue: 0.949)        // #ECEDF2
-    static let text2 = Color(red: 0.717, green: 0.725, blue: 0.784)        // #B7B9C8
-    static let text3 = Color(red: 0.494, green: 0.510, blue: 0.565)        // #7E8290
-    // text4 is used for 10–11pt captions; the original #565A6C only hit
-    // ~2.9:1 against bgWindow — below WCAG AA (4.5:1) at these sizes.
-    // #757A91 measures ~4.6:1 on bgWindow/bgPane while staying darker and
-    // bluer than text3 (~5.1:1) so the muted hierarchy survives.
-    static let text4 = Color(red: 0.459, green: 0.478, blue: 0.569)        // #757A91
+    static var text1: Color { current.text1 }   // 原 #ECEDF2
+    static var text2: Color { current.text2 }   // 原 #B7B9C8
+    static var text3: Color { current.text3 }   // 原 #7E8290
+    // text4 用于 10–11pt caption;#757A91 在 bgPane 上测得 ~4.6:1,过 WCAG AA。
+    static var text4: Color { current.text4 }   // 原 #757A91
 
     // accents
     static let accent       = Color(red: 0.369, green: 0.361, blue: 0.902) // #5E5CE6 systemIndigo
@@ -35,8 +38,16 @@ enum Theme {
     static let cyan         = Color(red: 0.392, green: 0.824, blue: 1.000) // #64D2FF
 
     // separators
-    static let divider = Color.white.opacity(0.045)
-    static let border  = Color.white.opacity(0.07)
+    static var divider: Color { current.divider }   // 原 white@.045
+    static var border:  Color { current.border }    // 原 white@.07
+
+    /// 明暗自适应的表面叠加色。暗色主题用白色提亮、亮色主题用黑色压暗,叠加强度
+    /// (`o`)语义在两侧一致。用于 hover / 选中 / 分隔线 / 填充等不透明 chrome 表面上
+    /// 的微叠加 —— 原先全写死 `Color.white.opacity(o)`,亮色主题下白叠白会失效。
+    /// (玻璃材质上的物理高光不走这里,见 VisualEffectBackground。)
+    static func overlay(_ o: Double) -> Color {
+        current.isDark ? Color.white.opacity(o) : Color.black.opacity(o)
+    }
 
     /// Canonical accent palette keyed by the `glint.accentName` token. Single
     /// source for the SwiftUI chrome accent (`WorkspaceStore.accent`), the

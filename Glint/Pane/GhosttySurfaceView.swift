@@ -81,6 +81,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
     override var isFlipped: Bool { false }
+    /// Go non-opaque when the terminal is translucent so AppKit's compositor
+    /// draws the desktop behind ghostty's alpha IOSurface instead of an opaque
+    /// backing. Re-queried by AppKit whenever the layer backing is refreshed.
+    override var isOpaque: Bool { !GhosttyManager.shared.terminalIsTransparent }
     override var wantsUpdateLayer: Bool { true }
     /// NSView's default in borderless windows is YES — that lets the terminal
     /// area drag the whole window. Force NO so clicks here only go to ghostty.
@@ -109,9 +113,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         self.initialInput = initialInput
         super.init(frame: frame)
         wantsLayer = true
-        // Placeholder until ghostty installs its IOSurfaceLayer — matches the
-        // terminal background so new panes don't flash white pre-first-frame.
-        layer?.backgroundColor = NSColor(red: 0.043, green: 0.039, blue: 0.078, alpha: 1.0).cgColor
+        // Placeholder until ghostty installs its IOSurfaceLayer. Opaque mode:
+        // paint the theme bg so a new pane doesn't flash white. Translucent
+        // mode: stay clear/non-opaque so nothing blocks the desktop behind
+        // ghostty's own background-opacity.
+        refreshAppearanceBacking()
         // Accept file drops from Finder; on drop we paste the shell-quoted
         // path so users can `cd <drop>` without typing it.
         registerForDraggedTypes([.fileURL])
@@ -134,6 +140,15 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// build with `GLINT_LOG_VISIBLE=1` to see attach / forced-redraw events.
     private let logVisible = ProcessInfo.processInfo.environment["GLINT_LOG_VISIBLE"] != nil
     var debugKey: String { paneKey ?? "?" }
+
+    /// (Re)apply the opaque/clear backing to whatever layer is currently
+    /// installed. Must be called AGAIN after `createSurface` because ghostty
+    /// REPLACES `view.layer` with its own IOSurfaceLayer — the placeholder
+    /// settings from init don't carry over to the new layer. Also re-run from
+    /// the representable's `updateNSView` so live opacity changes take hold.
+    func refreshAppearanceBacking() {
+        GhosttyManager.shared.applyTerminalBacking(to: layer)
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -336,6 +351,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             return
         }
         self.surface = s
+        // ghostty just swapped in its IOSurfaceLayer — re-stamp the
+        // opaque/clear backing onto the NEW layer (init's settings were on the
+        // discarded placeholder layer).
+        refreshAppearanceBacking()
         removeSurfaceCreationError()
 
         // Terminal history restore: echo last session's saved colored

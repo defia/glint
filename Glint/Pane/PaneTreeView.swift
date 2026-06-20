@@ -122,7 +122,7 @@ private struct SplitContainer: View {
 
     private var divider: some View {
         Rectangle()
-            .fill(Color.white.opacity(hovering ? 0.18 : 0.05))
+            .fill(hovering ? Theme.overlay(0.18) : Theme.divider)
             .frame(
                 width: isHorizontal ? 1 : nil,
                 height: isHorizontal ? nil : 1

@@ -93,10 +93,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.backgroundColor = .clear
         window.isOpaque = false
         window.hasShadow = true
-        window.appearance = NSAppearance(named: .darkAqua)
+        GhosttyManager.shared.syncWindowAppearance()
         window.titlebarSeparatorStyle = .none
         // Sidebar inset to nothing — we draw chrome ourselves
         window.toolbar = nil
+        // Install ghostty's window blur (no-op unless the terminal is
+        // translucent with a blur radius set). Deferred to the next runloop so
+        // the window's backing is fully realized and the ghostty app has
+        // finished bootstrap — same async path reloadConfig uses, so a
+        // blur preset set before launch still takes effect on first show.
+        DispatchQueue.main.async {
+            GhosttyManager.shared.applyWindowEffects()
+        }
 
         // Intercept the close button so closing the (only) window — which
         // terminates the app — gets the same "work is still running"

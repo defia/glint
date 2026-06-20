@@ -502,6 +502,73 @@ final class WorkspaceStore: ObservableObject {
 
     var accent: Color { Theme.accent(named: accentName) }
 
+    /// 当前主题 id(见 GlintTheme/ThemeRegistry)。改变时:持久化 → 更新 ThemeProvider
+    /// → 重注入 ghostty 终端配色 → bump themeRevision 触发 chrome 刷新。默认 glint-dark。
+    @Published var themeName: String = UserDefaults.standard.string(forKey: "glint.themeName") ?? "glint-dark" {
+        didSet {
+            UserDefaults.standard.set(themeName, forKey: "glint.themeName")
+            ThemeProvider.shared.current = ThemeRegistry.theme(id: themeName)
+            GhosttyManager.shared.reloadConfig()
+            GhosttyManager.shared.syncWindowAppearance()   // 浅/暗主题 → 玻璃材质跟随
+            themeRevision &+= 1
+        }
+    }
+
+    /// 单调计数器,主题切换时 bump。chrome 根容器依赖它来强制整树重新求值——因为
+    /// Theme.xxx 是 computed,SwiftUI 不会自动感知 ThemeProvider 内部的变化。
+    @Published var themeRevision: Int = 0
+
+    /// 临时套用某主题做「实时预览」——**不写 UserDefaults、不改 themeName**,只动
+    /// ThemeProvider.current + 重注入终端 + bump 刷新 chrome。主题浏览器用方向键/hover
+    /// 扫过列表时调它,让整窗即时变样;关闭时若未确认,用 `previewTheme(id: themeName)`
+    /// 还原回已确认的真值即可(themeName 全程没被动过)。
+    func previewTheme(id: String) {
+        ThemeProvider.shared.current = ThemeRegistry.theme(id: id)
+        GhosttyManager.shared.reloadConfig()
+        GhosttyManager.shared.syncWindowAppearance()
+        themeRevision &+= 1
+    }
+
+    // MARK: 透明度与模糊
+    //
+    // 终端区和 chrome(侧栏/工具栏)各一条透明度,可分开调:让桌面从背后透出。
+    // 窗口本身已是 isOpaque=false(AppDelegate),所以这里只需让各背景层带上 opacity,
+    // 并给 ghostty 注入 background-opacity / background-blur。默认全 1.0 / 0 = 现状不变。
+
+    /// 终端区透明度(ghostty 背景 + 终端 pane 的 Glint 兜底背景)。0.3…1.0。
+    @Published var terminalOpacity: Double =
+        (UserDefaults.standard.object(forKey: "glint.terminalOpacity") as? Double) ?? 1.0 {
+        didSet {
+            UserDefaults.standard.set(terminalOpacity, forKey: "glint.terminalOpacity")
+            GhosttyManager.shared.reloadConfig()   // 重注入 background-opacity
+            themeRevision &+= 1                     // 刷新 Glint 终端背景层
+        }
+    }
+
+    /// 终端是否透明(opacity < 1)。SwiftUI 侧的单一判定来源 —— 视图不再各自
+    /// 内联 `terminalOpacity < 1.0`。AppKit 侧(GhosttySurfaceView / 容器层)走
+    /// `GhosttyManager.terminalIsTransparent`,两者都以「opacity < 1」为唯一阈值,
+    /// 且都最终从已写入的 `glint.terminalOpacity` 派生,稳态下恒一致。
+    var isTerminalTransparent: Bool { terminalOpacity < 1.0 }
+
+    /// 侧栏 / 工具栏透明度。0.3…1.0。不动 ghostty,只刷新 chrome 背景层。
+    @Published var chromeOpacity: Double =
+        (UserDefaults.standard.object(forKey: "glint.chromeOpacity") as? Double) ?? 1.0 {
+        didSet {
+            UserDefaults.standard.set(chromeOpacity, forKey: "glint.chromeOpacity")
+            themeRevision &+= 1
+        }
+    }
+
+    /// 背景模糊半径(ghostty background-blur)。0 = 关。把透出的桌面磨砂虚化。
+    @Published var backgroundBlur: Double =
+        (UserDefaults.standard.object(forKey: "glint.backgroundBlur") as? Double) ?? 0 {
+        didSet {
+            UserDefaults.standard.set(backgroundBlur, forKey: "glint.backgroundBlur")
+            GhosttyManager.shared.reloadConfig()
+        }
+    }
+
     /// Dock icon the user picked. `.default` keeps the bundle's `.icon`
     /// asset (Liquid Glass on macOS 26); every other case overrides the
     /// running Dock tile with a static, pre-rendered image via

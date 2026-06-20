@@ -29,7 +29,7 @@ struct GlintSettingsView: View {
                     }
                 )
                 .overlay(alignment: .trailing) {
-                    Rectangle().fill(Color.white.opacity(0.045)).frame(width: 1)
+                    Rectangle().fill(Theme.overlay(0.045)).frame(width: 1)
                 }
 
             content
@@ -108,7 +108,7 @@ struct GlintSettingsView: View {
                         .foregroundStyle(Theme.text3)
                         .frame(width: 24, height: 24)
                         .background(
-                            Circle().fill(Color.white.opacity(0.06))
+                            Circle().fill(Theme.overlay(0.06))
                         )
                 }
                 .buttonStyle(.plain)
@@ -195,7 +195,7 @@ private struct SettingsCategoryRow: View {
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isSelected ? store.accent.opacity(0.22) : Color.white.opacity(0.05))
+                        .fill(isSelected ? store.accent.opacity(0.22) : Theme.overlay(0.05))
                     Image(systemName: category.icon)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(isSelected ? store.accent : Theme.text3)
@@ -222,8 +222,8 @@ private struct SettingsCategoryRow: View {
     }
 
     private var rowBg: Color {
-        if isSelected { return Color.white.opacity(0.08) }
-        if hover      { return Color.white.opacity(0.03) }
+        if isSelected { return Theme.overlay(0.08) }
+        if hover      { return Theme.overlay(0.03) }
         return .clear
     }
 }
@@ -254,10 +254,10 @@ struct SettingsCard<Content: View>: View {
             VStack(spacing: 0) { content() }
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.035))
+                        .fill(Theme.overlay(0.035))
                         .overlay(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.05), lineWidth: 0.5)
+                                .strokeBorder(Theme.overlay(0.05), lineWidth: 0.5)
                         )
                 )
 
@@ -318,7 +318,7 @@ struct SettingsRow<Trailing: View>: View {
 struct SettingsDivider: View {
     var body: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.04))
+            .fill(Theme.overlay(0.04))
             .frame(height: 1)
             .padding(.horizontal, 14)
     }
@@ -335,10 +335,10 @@ struct KeyCap: View {
             .padding(.vertical, 2)
             .background(
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.white.opacity(0.07))
+                    .fill(Theme.overlay(0.07))
                     .overlay(
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.5)
+                            .strokeBorder(Theme.overlay(0.06), lineWidth: 0.5)
                     )
             )
     }
@@ -462,12 +462,68 @@ private struct UpdatesCard: View {
 
 private struct AppearancePane: View {
     @EnvironmentObject var store: WorkspaceStore
+    @State private var browsingThemes = false
+
+    /// 设置里只展示精选 + 「跟随 Ghostty」,全量 502 套走浏览器(搜索 + 实时预览),
+    /// 否则这个网格会塞进 503 张卡片。当前选中若是某套 catalog 主题,把它也临时
+    /// 拉进网格,这样用户能看到自己选的是哪套、不必再开浏览器确认。
+    private var featuredCards: [GlintTheme] {
+        var cards = ThemeRegistry.featured + [ThemeRegistry.followGhostty]
+        if !cards.contains(where: { $0.id == store.themeName }) {
+            cards.append(ThemeRegistry.theme(id: store.themeName))
+        }
+        return cards
+    }
 
     var body: some View {
         SettingsCard("Theme") {
-            SettingsRow("Color scheme",
-                        subtitle: "Glint is dark-mode only for now.") {
-                StatusPill(label: "Dark", tone: .neutral)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("终端与界面共用一套配色,一键换肤。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.text3)
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
+                    spacing: 12
+                ) {
+                    ForEach(featuredCards) { theme in
+                        ThemePreviewCard(theme: theme,
+                                         selected: store.themeName == theme.id,
+                                         accent: store.accent)
+                            .onTapGesture { store.themeName = theme.id }
+                    }
+                }
+                Button {
+                    browsingThemes = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.grid.2x2")
+                            .font(.system(size: 11, weight: .medium))
+                        Text("浏览全部 \(ThemeRegistry.catalog.count + ThemeRegistry.featured.count) 套主题")
+                            .font(.system(size: 12, weight: .medium))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                    .foregroundStyle(store.accent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Theme.overlay(0.04))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Theme.overlay(0.08), lineWidth: 1)
+                            )
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
+            }
+            .padding(.vertical, 2)
+            .sheet(isPresented: $browsingThemes) {
+                ThemeBrowserSheet()
+                    .environmentObject(store)
             }
             SettingsDivider()
             SettingsRow("Accent",
@@ -480,7 +536,7 @@ private struct AppearancePane: View {
                             .overlay(
                                 Circle()
                                     .strokeBorder(
-                                        opt.rawValue == store.accentName ? Color.white : Color.white.opacity(0.15),
+                                        opt.rawValue == store.accentName ? Color.white : Theme.overlay(0.15),
                                         lineWidth: opt.rawValue == store.accentName ? 1.5 : 0.5
                                     )
                             )
@@ -500,6 +556,28 @@ private struct AppearancePane: View {
             }
         }
 
+        SettingsCard("透明度与模糊",
+                     footer: "让桌面从背后透出 —— 终端区与侧栏/工具栏可分开调。背景模糊把透出的桌面磨砂虚化,终端文字更易读。注:macOS 原生全屏下系统会禁用窗口透明。") {
+            SettingsRow("终端透明度") {
+                OpacityControl(value: $store.terminalOpacity)
+            }
+            SettingsDivider()
+            SettingsRow("界面透明度", subtitle: "侧栏与工具栏") {
+                OpacityControl(value: $store.chromeOpacity)
+            }
+            SettingsDivider()
+            SettingsRow("背景模糊") {
+                HStack(spacing: 10) {
+                    Slider(value: $store.backgroundBlur, in: 0...60)
+                        .frame(width: 150)
+                    Text("\(Int(store.backgroundBlur.rounded()))")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Theme.text3)
+                        .frame(width: 38, alignment: .trailing)
+                }
+            }
+        }
+
         SettingsCard("应用图标",
                      footer: "切换程序坞（Dock）中的图标。「默认」在 macOS 26 上保留 Liquid Glass 玻璃图标；其余配色为静态图标。") {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 5), spacing: 14) {
@@ -511,7 +589,7 @@ private struct AppearancePane: View {
                             .frame(width: 46, height: 46)
                             .background(
                                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                    .fill(preset == store.appIconPreset ? Color.white.opacity(0.16) : .clear)
+                                    .fill(preset == store.appIconPreset ? Theme.overlay(0.16) : .clear)
                                     .padding(-5)
                             )
                             .scaleEffect(preset == store.appIconPreset ? 1.06 : 1.0)
@@ -532,6 +610,311 @@ private struct AppearancePane: View {
         case indigo, cyan, pink, orange, green
         var id: String { rawValue }
         var color: Color { Theme.accent(named: rawValue) }
+    }
+}
+
+/// 主题预览卡片:一个 mini 终端(主题真实背景 + 彩色示例 + 16 色 palette 条)+ 名字。
+/// 让用户看着配色选,而不是只读主题名。
+private struct ThemePreviewCard: View {
+    let theme: GlintTheme
+    let selected: Bool
+    let accent: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack(alignment: .topTrailing) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Text("~/glint").foregroundStyle(theme.palette[safe: 4] ?? theme.foreground)
+                        Text("git").foregroundStyle(theme.palette[safe: 3] ?? theme.foreground)
+                        Text("push").foregroundStyle(theme.foreground)
+                    }
+                    HStack(spacing: 4) {
+                        Text("✓").foregroundStyle(theme.palette[safe: 2] ?? theme.foreground)
+                        Text("main").foregroundStyle(theme.palette[safe: 5] ?? theme.foreground)
+                        Text("→ origin").foregroundStyle(theme.foreground.opacity(0.85))
+                    }
+                    HStack(spacing: 2) {
+                        ForEach(Array(theme.palette.enumerated()), id: \.offset) { pair in
+                            RoundedRectangle(cornerRadius: 1, style: .continuous)
+                                .fill(pair.element)
+                                .frame(height: 5)
+                        }
+                    }
+                    .padding(.top, 3)
+                }
+                .font(.system(size: 8.5, weight: .medium, design: .monospaced))
+                .padding(10)
+                .frame(maxWidth: .infinity, minHeight: 66, alignment: .topLeading)
+                .background(theme.background)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(selected ? accent : Theme.overlay(0.10),
+                                      lineWidth: selected ? 2 : 1)
+                )
+
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, accent)
+                        .font(.system(size: 13))
+                        .padding(7)
+                }
+            }
+            Text(theme.name)
+                .font(.system(size: 11, weight: selected ? .semibold : .medium))
+                .foregroundStyle(selected ? Theme.text1 : Theme.text2)
+                .lineLimit(1)
+                .padding(.leading, 2)
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+/// 透明度滑块 + 百分比标签。范围下限 0.3,避免拖到全透导致界面不可用。
+private struct OpacityControl: View {
+    @Binding var value: Double
+    var body: some View {
+        HStack(spacing: 10) {
+            Slider(value: $value, in: 0.3...1.0)
+                .frame(width: 150)
+            Text("\(Int((value * 100).rounded()))%")
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(Theme.text3)
+                .frame(width: 38, alignment: .trailing)
+        }
+    }
+}
+
+// MARK: - 主题浏览器(全量 502+ 套:搜索 + 点击选中预览 + 确认应用)
+//
+// 设置卡只放精选;全量配色塞不进网格,所以走这个 sheet。每行一个 mini 配色条 +
+// 名字。**点击某行 = 选中并把那套套到整窗预览**(终端 + chrome 一起),底部「应用」
+// 按钮才真正持久化。取消 / 直接关 sheet = 放弃,还原回原主题。鼠标悬停只高亮,不变样。
+private struct ThemeBrowserSheet: View {
+    @EnvironmentObject var store: WorkspaceStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    /// 是否已点「应用」。未应用就关闭 → onDisappear 还原。
+    @State private var applied = false
+    /// 当前点选(预览中)的主题 id;初始 = 已应用的真值。
+    @State private var selectedID: String = ""
+    @FocusState private var searchFocused: Bool
+
+    /// featured 在前,catalog(已剔除撞 id 的)在后 —— 精选浮在顶上。
+    private var allThemes: [GlintTheme] { ThemeRegistry.featured + ThemeRegistry.catalog }
+
+    private var filtered: [GlintTheme] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return allThemes }
+        return allThemes.filter { $0.name.lowercased().contains(q) || $0.id.contains(q) }
+    }
+
+    /// 选中的主题和已应用的真值不同 → 「应用」可点。
+    private var dirty: Bool { selectedID != store.themeName }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            searchBar
+            Divider().overlay(Theme.overlay(0.06))
+            list
+            Divider().overlay(Theme.overlay(0.06))
+            footer
+        }
+        .frame(width: 540, height: 600)
+        .background(Theme.bgWindow)
+        .onAppear {
+            selectedID = store.themeName
+            DispatchQueue.main.async { searchFocused = true }
+        }
+        .onDisappear {
+            // 没点「应用」就关 → 还原到已应用的真值(themeName 全程没被动过)。
+            if !applied { store.previewTheme(id: store.themeName) }
+        }
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Theme.text3)
+            TextField("搜索主题…", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.text1)
+                .focused($searchFocused)
+            if !query.isEmpty {
+                Button { query = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.text4)
+                }
+                .buttonStyle(.plain)
+            }
+            Text("\(filtered.count)")
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(Theme.text4)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var list: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(filtered) { theme in
+                        ThemeBrowserRow(
+                            theme: theme,
+                            isSelected: selectedID == theme.id,
+                            isCurrent: store.themeName == theme.id,
+                            accent: store.accent,
+                            onPick: { select(theme.id) }
+                        )
+                        .id(theme.id)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+            }
+            .onAppear {
+                // 打开时滚到当前选中那行,用户立刻看到自己用的是哪套。
+                proxy.scrollTo(store.themeName, anchor: .center)
+            }
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            Spacer()
+            Button("取消") { dismiss() }       // applied 仍为 false → onDisappear 还原
+                .buttonStyle(.plain)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Theme.text2)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Theme.overlay(0.05))
+                )
+
+            Button("应用") { apply() }
+                .buttonStyle(.plain)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(dirty ? .white : Theme.text4)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(dirty ? store.accent : Theme.overlay(0.05))
+                )
+                .disabled(!dirty)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    /// 点击行:选中 + 整窗预览(不持久化)。
+    private func select(_ id: String) {
+        selectedID = id
+        store.previewTheme(id: id)
+    }
+
+    /// 点「应用」:把选中的主题持久化并关闭。
+    private func apply() {
+        applied = true
+        store.themeName = selectedID    // didSet 持久化 + 套用
+        dismiss()
+    }
+}
+
+/// 主题浏览器的一行:左侧 mini 配色块(背景 + "Aa" 前景示例)、中间名字 + 明暗标签、
+/// 右侧 16 色 palette 细条,最右选中态指示。点击 = 选中预览;悬停只高亮。
+private struct ThemeBrowserRow: View {
+    let theme: GlintTheme
+    /// 当前点选(预览中)的行 —— accent 高亮。
+    let isSelected: Bool
+    /// 已应用的真值那一行 —— 显示「当前」标记。
+    let isCurrent: Bool
+    let accent: Color
+    let onPick: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: onPick) {
+            HStack(spacing: 12) {
+                // mini 配色块:真实背景 + 前景色 "Aa"
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(theme.background)
+                    Text("Aa")
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(theme.foreground)
+                }
+                .frame(width: 46, height: 32)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(Theme.overlay(0.10), lineWidth: 1)
+                )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(theme.name)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Theme.text1)
+                            .lineLimit(1)
+                        if isCurrent {
+                            Text("当前")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(accent)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(
+                                    Capsule(style: .continuous).fill(accent.opacity(0.15))
+                                )
+                        }
+                    }
+                    Text(theme.isDark ? "Dark" : "Light")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Theme.text4)
+                }
+
+                Spacer(minLength: 8)
+
+                // 16 色 palette 细条
+                HStack(spacing: 0) {
+                    ForEach(Array(theme.palette.enumerated()), id: \.offset) { pair in
+                        Rectangle().fill(pair.element).frame(width: 7, height: 16)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .strokeBorder(Theme.overlay(0.08), lineWidth: 0.5)
+                )
+
+                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                    .font(.system(size: 14))
+                    .symbolRenderingMode(isSelected ? .palette : .monochrome)
+                    .foregroundStyle(isSelected ? AnyShapeStyle(accent) : AnyShapeStyle(Theme.overlay(0.15)))
+                    .frame(width: 18)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? accent.opacity(0.12)
+                          : hovering ? Theme.overlay(0.05) : .clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isSelected ? accent.opacity(0.55) : .clear, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 
@@ -878,10 +1261,10 @@ private struct GlintDropdown<Value: Hashable>: View {
             .frame(height: 22)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.white.opacity(hover || isOpen ? 0.09 : 0.06))
+                    .fill(Theme.overlay(hover || isOpen ? 0.09 : 0.06))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            .strokeBorder(Theme.overlay(0.08), lineWidth: 1)
                     )
             )
             .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -943,7 +1326,7 @@ private struct GlintDropdownRow: View {
         .frame(height: 27)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(hover ? Color.white.opacity(0.07) : .clear)
+                .fill(hover ? Theme.overlay(0.07) : .clear)
         )
         .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .onTapGesture(perform: select)
@@ -981,10 +1364,10 @@ private struct SoundPicker: View {
             .frame(height: 22)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.white.opacity(hover || isOpen ? 0.09 : 0.06))
+                    .fill(Theme.overlay(hover || isOpen ? 0.09 : 0.06))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            .strokeBorder(Theme.overlay(0.08), lineWidth: 1)
                     )
             )
             .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -1100,7 +1483,7 @@ private struct SoundPickerRow: View {
                                      : (playHover ? Theme.text1 : Theme.text3))
                     .frame(width: 20, height: 20)
                     .background(
-                        Circle().fill(Color.white.opacity(playHover ? 0.10 : 0))
+                        Circle().fill(Theme.overlay(playHover ? 0.10 : 0))
                     )
                     .contentShape(Circle())
             }
@@ -1113,7 +1496,7 @@ private struct SoundPickerRow: View {
         .frame(height: 27)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(hover ? Color.white.opacity(0.07) : .clear)
+                .fill(hover ? Theme.overlay(0.07) : .clear)
         )
         .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .onTapGesture(perform: select)
@@ -1154,11 +1537,11 @@ private struct ClaudeIconStyleSwatch: View {
             .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(isSelected ? store.accent.opacity(0.12) : Color.white.opacity(0.03))
+                    .fill(isSelected ? store.accent.opacity(0.12) : Theme.overlay(0.03))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(isSelected ? store.accent.opacity(0.85) : Color.white.opacity(0.08),
+                    .strokeBorder(isSelected ? store.accent.opacity(0.85) : Theme.overlay(0.08),
                                   lineWidth: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -1259,10 +1642,10 @@ private struct AboutPane: View {
             .padding(.vertical, 28)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(0.035))
+                    .fill(Theme.overlay(0.035))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.05), lineWidth: 0.5)
+                            .strokeBorder(Theme.overlay(0.05), lineWidth: 0.5)
                     )
             )
 
