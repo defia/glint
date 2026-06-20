@@ -185,12 +185,43 @@ struct CommandPalette: View {
 
         items.append(.action(
             title: "New Workspace",
-            subtitle: "Create a fresh workspace",
+            subtitle: "Pick a source: plain / repo / worktree",
             symbol: "plus.square",
             shortcut: "",
             tint: actionTint,
-            action: { store.addWorkspace() }
+            action: { store.openNewWorkspace() }
         ))
+
+        items.append(.action(
+            title: "New Worktree Workspace",
+            subtitle: "Cut an isolated branch + worktree from a repo",
+            symbol: "square.on.square.dashed",
+            shortcut: "",
+            tint: actionTint,
+            action: { store.openNewWorkspace(tab: "worktree") }
+        ))
+
+        // Worktree actions on the current workspace, only when it is one.
+        if let cur = store.workspaces.first(where: { $0.id == store.selectedWorkspaceID }),
+           cur.source.isWorktree {
+            let curID = cur.id
+            items.append(.action(
+                title: "Reveal Worktree in Finder",
+                subtitle: cur.source.worktreePath ?? "Show the worktree directory",
+                symbol: "folder",
+                shortcut: "",
+                tint: actionTint,
+                action: { store.revealWorktreeInFinder(curID) }
+            ))
+            items.append(.action(
+                title: "Close and Remove Worktree…",
+                subtitle: "Delete the worktree directory (confirm required)",
+                symbol: "trash",
+                shortcut: "",
+                tint: actionTint,
+                action: { store.pendingWorktreeDelete = curID }
+            ))
+        }
 
         items.append(.action(
             title: "New Tab",

@@ -66,6 +66,55 @@ extension SplitNode {
     }
 }
 
+/// Where a workspace's shell/agent/git actually run, and what repo/branch it's
+/// bound to. `plain` is the zero-cost default (a bare shell, no repo) so the
+/// common "just open a terminal" path stays untouched. Worktree fields are
+/// Phase 1; SSH/remote fields are reserved for Phase 2/3 and decode to nil.
+enum WorkspaceSourceKind: String, Codable {
+    case plain
+    case localRepo
+    case localWorktree
+    case sshProject
+    case sshWorktree
+    case remoteTask
+}
+
+struct WorkspaceSource: Codable, Equatable {
+    var kind: WorkspaceSourceKind
+    /// Main worktree top-level of the bound repo (`git rev-parse --show-toplevel`).
+    var repoRoot: String?
+    var branch: String?
+    var baseBranch: String?
+    /// Filesystem path of the dedicated worktree (kind == .localWorktree).
+    var worktreePath: String?
+    // Reserved for Phase 2/3 — unused today, decode to nil on old + new saves.
+    var sshConnectionID: UUID?
+    var remotePath: String?
+    var remoteWorkspaceID: String?
+
+    static let plain = WorkspaceSource(kind: .plain)
+
+    var isWorktree: Bool { kind == .localWorktree || kind == .sshWorktree }
+    var isRemote: Bool { kind == .sshProject || kind == .sshWorktree || kind == .remoteTask }
+    /// The directory git operations should target: the worktree if there is one,
+    /// otherwise the repo root.
+    var gitPath: String? { worktreePath ?? repoRoot }
+
+    init(kind: WorkspaceSourceKind,
+         repoRoot: String? = nil, branch: String? = nil, baseBranch: String? = nil,
+         worktreePath: String? = nil, sshConnectionID: UUID? = nil,
+         remotePath: String? = nil, remoteWorkspaceID: String? = nil) {
+        self.kind = kind
+        self.repoRoot = repoRoot
+        self.branch = branch
+        self.baseBranch = baseBranch
+        self.worktreePath = worktreePath
+        self.sshConnectionID = sshConnectionID
+        self.remotePath = remotePath
+        self.remoteWorkspaceID = remoteWorkspaceID
+    }
+}
+
 struct Pane: Identifiable, Codable {
     let id: PaneID
     var title: String
@@ -137,6 +186,9 @@ struct Workspace: Identifiable, Codable {
     /// unaffected by which tab a pane lives in.
     var panes: [PaneID: Pane]
     var nextPaneSeq: UInt32
+    /// Repo/worktree/remote binding. Defaults to `.plain`; only persisted when
+    /// non-plain, so existing saves and plain workspaces stay byte-clean.
+    var source: WorkspaceSource
 
     var accent: Color {
         Color(hex: accentHex) ?? Color(red: 0.37, green: 0.36, blue: 0.90)
@@ -144,7 +196,7 @@ struct Workspace: Identifiable, Codable {
 
     private enum CodingKeys: String, CodingKey {
         case id, name, userNamed, accentHex, symbol, archived
-        case tabs, selectedTabID, nextTabSeq, panes, nextPaneSeq
+        case tabs, selectedTabID, nextTabSeq, panes, nextPaneSeq, source
         // Legacy single-tree keys, still read so pre-tabs saves migrate.
         case root, focusedPane
     }
@@ -152,7 +204,7 @@ struct Workspace: Identifiable, Codable {
     init(id: UUID, name: String, userNamed: Bool, accentHex: String, symbol: String,
          tabs: [WorkspaceTab], selectedTabID: TabID, nextTabSeq: UInt32,
          panes: [PaneID: Pane], nextPaneSeq: UInt32,
-         archived: Bool = false) {
+         archived: Bool = false, source: WorkspaceSource = .plain) {
         self.id = id
         self.name = name
         self.userNamed = userNamed
@@ -164,6 +216,7 @@ struct Workspace: Identifiable, Codable {
         self.nextTabSeq = nextTabSeq
         self.panes = panes
         self.nextPaneSeq = nextPaneSeq
+        self.source = source
     }
 
     init(from decoder: Decoder) throws {
@@ -179,6 +232,8 @@ struct Workspace: Identifiable, Codable {
         self.archived = (try? c.decode(Bool.self, forKey: .archived)) ?? false
         self.panes = try c.decode([PaneID: Pane].self, forKey: .panes)
         self.nextPaneSeq = try c.decode(UInt32.self, forKey: .nextPaneSeq)
+        // Additive: old saves predate source binding — default to plain.
+        self.source = (try? c.decode(WorkspaceSource.self, forKey: .source)) ?? .plain
 
         if let tabs = try? c.decode([WorkspaceTab].self, forKey: .tabs), !tabs.isEmpty {
             self.tabs = tabs
@@ -218,6 +273,7 @@ struct Workspace: Identifiable, Codable {
         try c.encode(nextTabSeq, forKey: .nextTabSeq)
         try c.encode(panes, forKey: .panes)
         try c.encode(nextPaneSeq, forKey: .nextPaneSeq)
+        if source.kind != .plain { try c.encode(source, forKey: .source) }  // omit the common case
     }
 }
 
@@ -296,6 +352,15 @@ extension Workspace {
     /// selected tab's focused pane's working directory.
     var displayName: String {
         if userNamed && !name.isEmpty { return name }
+        // Worktree/repo workspaces read better as "repo · branch" than as a
+        // generic cwd label — the branch is the whole point of the worktree.
+        if source.kind != .plain, let branch = source.branch {
+            let leaf = branch.split(separator: "/").last.map(String.init) ?? branch
+            if let root = source.repoRoot {
+                return "\((root as NSString).lastPathComponent) · \(leaf)"
+            }
+            return leaf
+        }
         let cwd = (selectedTab?.focusedPane).flatMap { panes[$0]?.workingDirectory }
             ?? panes.values.compactMap(\.workingDirectory).first
         return Self.shortLabel(forCwd: cwd) ?? name
@@ -390,6 +455,41 @@ final class WorkspaceStore: ObservableObject {
     /// inherits the workspace context and feels of-the-app rather than
     /// of-the-OS.
     @Published var settingsOpen: Bool = false
+
+    /// Drives the New Workspace sheet (source picker: plain / repo / worktree).
+    @Published var newWorkspaceSheetOpen: Bool = false
+    /// Which source tab the sheet opens on ("plain" / "repo" / "worktree").
+    @Published var newWorkspaceSheetTab: String = "plain"
+    /// Optional repo path to pre-fill the sheet with (e.g. "New Worktree from
+    /// Here" on a specific card), overriding the current-workspace guess.
+    @Published var newWorkspaceRepoHint: String? = nil
+    /// Workspace whose worktree the user asked to delete. Drives a single shared
+    /// confirm dialog (hosted in ContentView) so every entry point — card menu,
+    /// command palette — funnels through the same "this deletes files" gate.
+    @Published var pendingWorktreeDelete: UUID? = nil
+    func openNewWorkspace(tab: String = "plain", repoHint: String? = nil) {
+        newWorkspaceSheetTab = tab
+        newWorkspaceRepoHint = repoHint
+        newWorkspaceSheetOpen = true
+    }
+
+    /// Lightweight git status per workspace, keyed by workspace id. Refreshed by
+    /// `gitTimer` for non-plain sources and on demand. NON-persistent — it's live
+    /// state, recomputed each launch, never written to state.json.
+    @Published var gitStatuses: [UUID: GitStatus] = [:]
+    /// Workspaces with a `git status` poll in flight — guards against a slow git
+    /// (large/network repo) letting 5s ticks stack into overlapping subprocesses
+    /// whose out-of-order results overwrite a newer status.
+    private var gitInFlight: Set<UUID> = []
+
+    /// Out-of-band git (Plan B): runs as a subprocess, never via the terminal.
+    let git = GitService()
+
+    /// One-shot launch command for a freshly-minted pane (e.g. start `claude` in
+    /// a new worktree). Consumed by `surfaceView` the first time that pane's
+    /// surface is created, then removed — unlike `lastAgent` resume, it isn't
+    /// persisted and never re-runs.
+    private var pendingInitialInput: [WorkspacePaneKey: String] = [:]
 
     /// Tick incremented whenever the global ⌘F is fired. `SidebarView`
     /// observes this and pulls focus into its search field. Using a tick
@@ -888,6 +988,7 @@ final class WorkspaceStore: ObservableObject {
     private var cwdTimer: Timer?
     /// Counts 1s cwd ticks so scrollback flushes run at ~5s, not every second.
     private var scrollbackFlushTick = 0
+    private var gitStatusTick = 0
     private var observerTokens: [NSObjectProtocol] = []
 
     /// The app's single live store. AppDelegate consults it for the quit
@@ -936,8 +1037,16 @@ final class WorkspaceStore: ObservableObject {
                     self.scrollbackFlushTick = 0
                     self.flushScrollback()
                 }
+                // Refresh git status for repo/worktree workspaces ~every 5s.
+                self.gitStatusTick += 1
+                if self.gitStatusTick >= 5 {
+                    self.gitStatusTick = 0
+                    self.refreshAllGitStatuses()
+                }
             }
         }
+        // Prime status for restored worktree workspaces right away.
+        refreshAllGitStatuses()
 
         // Drop scrollback snapshots for panes that no longer exist.
         var liveScrollbackIDs = Set<String>()
@@ -1070,7 +1179,11 @@ final class WorkspaceStore: ObservableObject {
         // it runs after the shell prints its prompt — no timing dance on our
         // side. Resolved once at mint time; later toggle changes don't reach
         // a surface that already booted.
+        // A pending one-shot command (e.g. launch the agent chosen when this
+        // worktree workspace was created) wins over agent-resume and is consumed
+        // exactly once.
         let restoreCommand: String? = {
+            if let pending = pendingInitialInput.removeValue(forKey: key) { return pending }
             guard let pane = workspaces.first(where: { $0.id == workspaceID })?.panes[paneID]
             else { return nil }
             switch pane.lastAgent {
@@ -1641,6 +1754,7 @@ final class WorkspaceStore: ObservableObject {
         guard !leaves.isEmpty,
               let pos = leaves.firstIndex(of: workspaces[i].tabs[t].focusedPane) else { return }
         workspaces[i].tabs[t].focusedPane = leaves[(pos + 1) % leaves.count]
+        refreshGitStatusNow(for: workspaces[i].id)
     }
 
     func focusPrevious() {
@@ -1649,11 +1763,13 @@ final class WorkspaceStore: ObservableObject {
         guard !leaves.isEmpty,
               let pos = leaves.firstIndex(of: workspaces[i].tabs[t].focusedPane) else { return }
         workspaces[i].tabs[t].focusedPane = leaves[(pos - 1 + leaves.count) % leaves.count]
+        refreshGitStatusNow(for: workspaces[i].id)
     }
 
     func focus(_ id: PaneID) {
         guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
         workspaces[i].tabs[t].focusedPane = id
+        refreshGitStatusNow(for: workspaces[i].id)
     }
 
     // MARK: - external control (control.sock)
@@ -1737,6 +1853,7 @@ final class WorkspaceStore: ObservableObject {
     func selectWorkspace(_ id: UUID) {
         selectedWorkspaceID = id
         acknowledgeCompletionIfNeeded(for: id)
+        refreshGitStatusNow(for: id)   // switching the shown terminal re-detects git
     }
 
     /// Select the nth workspace in sidebar order (0-based). Used by the
@@ -1832,6 +1949,7 @@ final class WorkspaceStore: ObservableObject {
         workspaces[i].selectedTabID = tabID
         // Viewing the tab is what "reads" its ✓ done / error badges.
         acknowledgeCompletionIfNeeded(for: workspaces[i].id)
+        refreshGitStatusNow(for: workspaces[i].id)   // tab's focused pane may sit in a different repo
     }
 
     /// Set a custom display name for a tab in the current workspace. Empty
@@ -1894,12 +2012,16 @@ final class WorkspaceStore: ObservableObject {
         selectWorkspace(active[prev].id)
     }
 
-    func deleteWorkspace(_ id: UUID) {
+    /// `confirm: false` skips the busy-pane confirmation — used when the caller
+    /// already ran a stricter, destructive confirm (e.g. worktree removal, which
+    /// deletes files on disk) so a second cancelable modal can't leave an
+    /// orphaned workspace whose files are already gone.
+    func deleteWorkspace(_ id: UUID, confirm: Bool = true) {
         guard let idx = workspaces.firstIndex(where: { $0.id == id }) else { return }
 
         let busyPanes = workspaces[idx].panes.keys
             .filter { paneNeedsCloseConfirmation(WorkspacePaneKey(workspace: id, pane: $0)) }
-        if !busyPanes.isEmpty,
+        if confirm, !busyPanes.isEmpty,
            !Self.confirmDestruction(
                message: String(format: String(localized: "Delete “%@”?"), workspaces[idx].displayName),
                informative: String(format: String(localized: "%d of its panes still have something running; everything in this workspace will be terminated."), busyPanes.count),
@@ -2017,6 +2139,187 @@ final class WorkspaceStore: ObservableObject {
         let ws = Workspace.fresh(name: "New workspace", accentHex: pick.0, symbol: pick.1)
         workspaces.append(ws)
         selectedWorkspaceID = ws.id
+    }
+
+    /// Open a workspace anchored at `directory` (the "Local Repo" source). The
+    /// shell is seeded there immediately so it opens in the right place — the old
+    /// stub called `addWorkspace()` and dropped the path, landing the user in
+    /// their home dir. If the directory is inside a git repo, the source is then
+    /// upgraded to `.localRepo` so the git button / worktree actions light up.
+    func openDirectoryWorkspace(_ directory: String) {
+        let expanded = (directory as NSString).expandingTildeInPath
+        guard !expanded.isEmpty else { addWorkspace(); return }
+        let first = PaneID(value: 0)
+        let pane = Pane(id: first, title: "zsh", workingDirectory: expanded)
+        let tab = WorkspaceTab(id: TabID(value: 0), name: nil, root: .leaf(first), focusedPane: first)
+        let ws = Workspace(
+            id: UUID(), name: "New workspace", userNamed: false,
+            accentHex: nextAccentHex(), symbol: "•",
+            tabs: [tab], selectedTabID: tab.id, nextTabSeq: 1,
+            panes: [first: pane], nextPaneSeq: 1,
+            source: WorkspaceSource(kind: .plain))
+        workspaces.append(ws)
+        selectedWorkspaceID = ws.id
+        let id = ws.id
+        Task {
+            guard let root = await git.repoRoot(at: expanded) else { return }
+            let branch = await git.currentBranch(at: root)
+            await MainActor.run {
+                if let i = workspaces.firstIndex(where: { $0.id == id }) {
+                    workspaces[i].source = WorkspaceSource(
+                        kind: .localRepo, repoRoot: root, branch: branch)
+                }
+                refreshGitStatusNow(for: id)
+            }
+        }
+    }
+
+    // MARK: - Worktree (Plan B: out-of-band git, never via the terminal)
+
+    private func nextAccentHex() -> String {
+        let palette = ["5E5CE6", "FF6582", "30D158", "FF9F0A", "64D2FF", "BF5AF2"]
+        return palette[workspaces.count % palette.count]
+    }
+
+    /// Best-effort starting point for the New Worktree sheet: the current
+    /// workspace's bound repo root, else its focused pane's cwd (the sheet then
+    /// validates it's actually a repo via git).
+    func currentRepoGuess() -> String? {
+        guard let ws = workspaces.first(where: { $0.id == selectedWorkspaceID }) else { return nil }
+        if let root = ws.source.repoRoot { return root }
+        return (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
+            ?? ws.panes.values.compactMap(\.workingDirectory).first
+    }
+
+    /// The repo root a workspace's worktree actions should target: its bound
+    /// source if any, else discovered from the focused pane's cwd.
+    func repoRoot(for ws: Workspace) async -> String? {
+        if let root = ws.source.repoRoot { return root }
+        let cwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
+            ?? ws.panes.values.compactMap(\.workingDirectory).first
+        guard let cwd else { return nil }
+        return await git.repoRoot(at: cwd)
+    }
+
+    /// Create a worktree (out-of-band) and open a workspace bound to it. With
+    /// `createBranch`, cuts a new branch off `baseBranch`; otherwise checks out
+    /// the existing `branch`. Optionally launches `agentCommand` in the first
+    /// pane. Throws (propagating the git error) so the sheet can surface it.
+    @discardableResult
+    func createWorktreeWorkspace(repoRoot: String, baseBranch: String, branch: String,
+                                 worktreePath: String, createBranch: Bool = true,
+                                 agentCommand: String?) async throws -> UUID {
+        let expanded = (worktreePath as NSString).expandingTildeInPath
+        try await git.addWorktree(repo: repoRoot, path: expanded,
+                                  newBranch: createBranch ? branch : nil,
+                                  base: createBranch ? baseBranch : branch)
+
+        let first = PaneID(value: 0)
+        let pane = Pane(id: first, title: "zsh", workingDirectory: expanded)
+        let tab = WorkspaceTab(id: TabID(value: 0), name: nil, root: .leaf(first), focusedPane: first)
+        let ws = Workspace(
+            id: UUID(), name: "New workspace", userNamed: false,
+            accentHex: nextAccentHex(), symbol: "•",
+            tabs: [tab], selectedTabID: tab.id, nextTabSeq: 1,
+            panes: [first: pane], nextPaneSeq: 1,
+            source: WorkspaceSource(kind: .localWorktree, repoRoot: repoRoot,
+                                    branch: branch, baseBranch: baseBranch,
+                                    worktreePath: expanded))
+        if let cmd = agentCommand, !cmd.isEmpty {
+            let key = WorkspacePaneKey(workspace: ws.id, pane: first)
+            pendingInitialInput[key] = cmd.hasSuffix("\n") ? cmd : cmd + "\n"
+        }
+        workspaces.append(ws)
+        selectedWorkspaceID = ws.id
+        await refreshGitStatus(for: ws.id)
+        return ws.id
+    }
+
+    /// Remove a worktree from disk (`git worktree remove`) and close its
+    /// workspace. `force` is required when the worktree is dirty; gated behind a
+    /// confirm in the UI. Optionally also deletes the branch.
+    func removeWorktreeWorkspace(_ id: UUID, alsoDeleteBranch: Bool, force: Bool) async throws {
+        guard let ws = workspaces.first(where: { $0.id == id }) else { return }
+        // Not a local worktree we can remove from disk (e.g. an sshWorktree, or a
+        // source that lost its path). Throw instead of silently no-op'ing — the
+        // user confirmed a destructive action and must get feedback, not silence.
+        guard let repo = ws.source.repoRoot, let path = ws.source.worktreePath else {
+            throw GitError.notARepository(ws.source.repoRoot ?? ws.displayName)
+        }
+        // Remove the worktree first; this is the primary, irreversible action.
+        try await git.removeWorktree(repo: repo, path: path, force: force)
+        // Branch deletion is secondary: if it fails (e.g. branch checked out
+        // elsewhere) we must STILL finish closing the workspace — otherwise the
+        // worktree dir is gone but the card lingers. Capture and rethrow after.
+        var branchError: Error?
+        if alsoDeleteBranch, let branch = ws.source.branch {
+            do { try await git.deleteBranch(repo: repo, name: branch, force: true) }
+            catch { branchError = error }
+        }
+        gitStatuses[id] = nil
+        // confirm:false — the worktree-delete dialog already confirmed a stricter
+        // action; a second cancelable modal here would orphan the now-deleted dir.
+        deleteWorkspace(id, confirm: false)
+        if let branchError { throw branchError }
+    }
+
+    func revealWorktreeInFinder(_ id: UUID) {
+        guard let ws = workspaces.first(where: { $0.id == id }),
+              let path = ws.source.worktreePath ?? ws.source.repoRoot ?? effectiveGitPath(for: ws)
+        else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(
+            [URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])
+    }
+
+    // MARK: lightweight git status (non-persistent cache)
+
+    /// The path git status/worktree actions run against for a workspace: the
+    /// bound source's git path if any, else the focused pane's live cwd. This is
+    /// what lets a *plain* workspace that's simply `cd`'d into a repo still
+    /// surface git status and the tab's git button — no `.localWorktree` source
+    /// required.
+    func effectiveGitPath(for ws: Workspace) -> String? {
+        if let p = ws.source.gitPath { return p }
+        return (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
+            ?? ws.panes.values.compactMap(\.workingDirectory).first
+    }
+
+    func gitStatus(for id: UUID) -> GitStatus? { gitStatuses[id] }
+
+    func refreshGitStatus(for id: UUID) async {
+        guard let ws = workspaces.first(where: { $0.id == id }),
+              let path = effectiveGitPath(for: ws) else {
+            if gitStatuses[id] != nil { gitStatuses[id] = nil }
+            return
+        }
+        // Coalesce: if a poll for this workspace is already running, skip — the
+        // in-flight one will publish the freshest result.
+        guard !gitInFlight.contains(id) else { return }
+        gitInFlight.insert(id)
+        defer { gitInFlight.remove(id) }
+        if let st = try? await git.status(at: path) {
+            gitStatuses[id] = st
+        } else if gitStatuses[id] != nil {
+            // cwd left the repo (or never was one) — drop the stale badge.
+            gitStatuses[id] = nil
+        }
+    }
+
+    /// Poll git status for every workspace that has a path to check — bound
+    /// repo/worktree sources plus plain shells whose cwd is inside a repo (so the
+    /// tab's git button appears live as you `cd` around). One `git status` per
+    /// workspace; non-repo cwds fail fast and clear their cache entry.
+    func refreshAllGitStatuses() {
+        for ws in workspaces where effectiveGitPath(for: ws) != nil {
+            Task { await refreshGitStatus(for: ws.id) }
+        }
+    }
+
+    /// Fire-and-forget single refresh, used when the *displayed* terminal
+    /// changes (workspace / tab / pane switch) so the tab's git button updates
+    /// right away instead of waiting up to ~5s for the next poll.
+    func refreshGitStatusNow(for id: UUID) {
+        Task { await refreshGitStatus(for: id) }
     }
 
     // MARK: tree ops

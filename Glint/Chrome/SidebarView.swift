@@ -196,7 +196,7 @@ struct SidebarView: View {
 
     private var newWorkspaceCard: some View {
         Button {
-            store.addWorkspace()
+            store.openNewWorkspace()
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "plus")
@@ -729,10 +729,19 @@ private struct WorkspaceCard: View {
                 }
             } else {
                 Button("Rename") { startEditing() }
-                Button("New Workspace") { store.addWorkspace() }
+                Button("New Workspace") { store.openNewWorkspace() }
+                Button("New Worktree from Here…") {
+                    store.openNewWorkspace(tab: "worktree", repoHint: wsRepoHint)
+                }
+                if ws.source.isWorktree {
+                    Button("Reveal Worktree in Finder") { store.revealWorktreeInFinder(ws.id) }
+                }
                 Divider()
                 Button("Archive") { store.archiveWorkspace(ws.id) }
-                Button("Delete Workspace", role: .destructive) {
+                if ws.source.isWorktree {
+                    Button("Delete Worktree…", role: .destructive) { store.pendingWorktreeDelete = ws.id }
+                }
+                Button("Close Workspace", role: .destructive) {
                     store.deleteWorkspace(ws.id)
                 }
             }
@@ -772,6 +781,14 @@ private struct WorkspaceCard: View {
         draftName = ws.userNamed ? ws.name : ""
         isEditing = true
     }
+
+    /// Repo to pre-fill the New Worktree sheet with when launched from this card.
+    private var wsRepoHint: String? {
+        ws.source.repoRoot
+            ?? (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
+            ?? ws.panes.values.compactMap(\.workingDirectory).first
+    }
+
 
     private func commitRename() {
         store.renameWorkspace(ws.id, to: draftName)
@@ -903,12 +920,34 @@ private struct WorkspaceCard: View {
 
     private func workspaceMetadataRow(active: Bool) -> some View {
         HStack(spacing: 5) {
-            if let tabs = tabCountText {
-                metadataBadge(tabs, active: active)
+            if ws.source.isWorktree {
+                tintedBadge("WT", fg: Color.black.opacity(0.82), bg: Theme.orange)
+                if let branch = ws.source.branch {
+                    let leaf = branch.split(separator: "/").last.map(String.init) ?? branch
+                    metadataBadge(leaf, active: active)
+                }
+                if let st = store.gitStatus(for: ws.id), st.dirtyCount > 0 {
+                    tintedBadge("+\(st.dirtyCount)", fg: Color.black.opacity(0.82), bg: Theme.orange.opacity(0.8))
+                }
+            } else {
+                if let tabs = tabCountText {
+                    metadataBadge(tabs, active: active)
+                }
+                metadataBadge(paneCountText, active: active)
             }
-            metadataBadge(paneCountText, active: active)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tintedBadge(_ text: String, fg: Color, bg: Color) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .heavy))
+            .foregroundStyle(fg)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Capsule(style: .continuous).fill(bg))
     }
 
     private func metadataBadge(_ text: String, active: Bool) -> some View {

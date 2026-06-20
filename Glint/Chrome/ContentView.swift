@@ -111,6 +111,50 @@ struct ContentView: View {
             GlintSettingsView()
                 .environmentObject(store)
         }
+        .sheet(isPresented: $store.newWorkspaceSheetOpen) {
+            NewWorkspaceSheet()
+                .environmentObject(store)
+        }
+        .confirmationDialog(
+            worktreeDeleteTitle,
+            isPresented: Binding(get: { store.pendingWorktreeDelete != nil },
+                                 set: { if !$0 { store.pendingWorktreeDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Worktree, Keep Branch", role: .destructive) { deleteWorktree(keepBranch: true) }
+            Button("Delete Worktree and Branch", role: .destructive) { deleteWorktree(keepBranch: false) }
+            Button("Cancel", role: .cancel) { store.pendingWorktreeDelete = nil }
+        } message: {
+            Text("Removes the worktree directory from disk. Closing a workspace only drops the UI — this deletes files and can't be undone.")
+        }
+    }
+
+    private var worktreeDeleteTitle: String {
+        let branch = store.pendingWorktreeDelete
+            .flatMap { id in store.workspaces.first { $0.id == id } }?.source.branch
+        let name = branch ?? String(localized: "this branch")
+        return String(localized: "Delete worktree for \(name)?")
+    }
+
+    private func deleteWorktree(keepBranch: Bool) {
+        guard let id = store.pendingWorktreeDelete else { return }
+        store.pendingWorktreeDelete = nil
+        Task {
+            do {
+                try await store.removeWorktreeWorkspace(id, alsoDeleteBranch: !keepBranch, force: true)
+            } catch {
+                // Surface the failure instead of swallowing it — a confirmed
+                // "delete files" that silently does nothing is the worst outcome.
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.alertStyle = .warning
+                    alert.messageText = String(localized: "Couldn't remove the worktree")
+                    alert.informativeText = error.localizedDescription
+                    alert.addButton(withTitle: String(localized: "OK"))
+                    alert.runModal()
+                }
+            }
+        }
     }
 }
 
@@ -173,7 +217,24 @@ struct ToolbarHeader: View {
             // strip, so window drag keeps working.
             TabBar()
                 .padding(.horizontal, 12)
+            // Workspace git/worktree button. Reflects the currently shown
+            // terminal (the selected tab's focused pane), re-detected on every
+            // switch. Lives here — not on the tab chips — because chips only
+            // render with ≥2 tabs, and git status is per-workspace anyway, so a
+            // single header button is the one coherent home for it.
             HStack(spacing: 4) {
+                // Git/worktree button joins the trailing cluster (instead of a
+                // separate island) with a hairline seam, mirroring how the
+                // collapsed-sidebar switcher joins the leading capsule.
+                if let ws = store.selectedWorkspace,
+                   ws.source.isWorktree || store.gitStatus(for: ws.id) != nil {
+                    HeaderGitButton(ws: ws)
+                    if floating {
+                        Rectangle()
+                            .fill(Theme.overlay(0.10))
+                            .frame(width: 1, height: 16)
+                    }
+                }
                 ToolbarIconButton(symbol: "command", help: "Command Palette (⌘⇧P)") {
                     store.commandPaletteOpen = true
                 }
@@ -1129,6 +1190,76 @@ private struct TabOverflowRow: View {
 /// fires — without it, `.buttonStyle(.plain)` lets the Image be the only
 /// hit target and a 13pt SF Symbol leaves a lot of dead space inside the
 /// button's frame.
+/// Header git/worktree button. Flat to match the trailing toolbar cluster —
+/// a bare glyph + branch label on the glass island, with the same capsule
+/// hover well as `ToolbarIconButton`, no inner accent pill. Opens the
+/// lightweight git popover; reflects the currently shown terminal.
+private struct HeaderGitButton: View {
+    @EnvironmentObject var store: WorkspaceStore
+    let ws: Workspace
+    @State private var open = false
+    @State private var hovering = false
+
+    private var isWT: Bool { ws.source.isWorktree }
+    private var label: String {
+        let b = ws.source.branch ?? store.gitStatus(for: ws.id)?.branch
+        return b.flatMap { $0.split(separator: "/").last.map(String.init) } ?? "git"
+    }
+    private var status: GitStatus? { store.gitStatus(for: ws.id) }
+
+    /// Compact `↑ahead ↓behind ●dirty` chip; nil glyph/count pairs collapse so
+    /// a clean branch shows nothing but its name.
+    @ViewBuilder private func countChip(_ glyph: String, _ count: Int, _ tint: Color) -> some View {
+        if count > 0 {
+            Text("\(glyph)\(count)")
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .foregroundStyle(tint)
+        }
+    }
+
+    var body: some View {
+        Button { open.toggle() } label: {
+            HStack(spacing: 5) {
+                Image(systemName: isWT ? "square.on.square.dashed" : "arrow.triangle.branch")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(isWT ? Theme.orange : store.accent)
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.text2)
+                    .lineLimit(1).truncationMode(.middle)
+                    .frame(maxWidth: 110, alignment: .leading)
+                if let s = status, s.ahead > 0 || s.behind > 0 || s.dirtyCount > 0 {
+                    HStack(spacing: 4) {
+                        countChip("↑", s.ahead, Theme.green)
+                        countChip("↓", s.behind, store.accent)
+                        countChip("●", s.dirtyCount, Theme.orange)
+                    }
+                    .fixedSize()
+                }
+            }
+            // Hug the content so a short branch name doesn't reserve the full
+            // 110pt cap — that reserved slack is what read as "too big" and left
+            // a gap between the name and the ahead/behind/dirty chips.
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 9)
+            .frame(height: 38)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Theme.overlay(hovering ? 0.08 : 0))
+                    .padding(2)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(isWT ? "Worktree git status" : "Git status")
+        .popover(isPresented: $open, arrowEdge: .bottom) {
+            GitStatusPopover(ws: ws, close: { open = false })
+                .environmentObject(store)
+        }
+    }
+}
+
 private struct ToolbarIconButton: View {
     let symbol: String
     let help: LocalizedStringKey
@@ -1391,8 +1522,8 @@ private struct WorkspaceSwitcherPopover: View {
 
     private var newWorkspaceRow: some View {
         Button {
-            store.addWorkspace()
             dismiss()
+            store.openNewWorkspace()
         } label: {
             HStack(spacing: 10) {
                 ZStack {
