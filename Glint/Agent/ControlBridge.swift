@@ -291,7 +291,7 @@ final class ControlBridge {
     }
 
     private static func serialize(_ dict: [String: Any]) -> Data {
-        (try? JSONSerialization.data(withJSONObject: dict))
+        SafeJSON.data(dict)
             ?? Data(#"{"ok":false,"error":"bad-request"}"#.utf8)
     }
 }

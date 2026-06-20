@@ -303,7 +303,7 @@ enum CodexUsageReader {
                   let obj = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
                   let payload = obj["payload"] as? [String: Any],
                   let rlAny = payload["rate_limits"],
-                  let rlData = try? JSONSerialization.data(withJSONObject: rlAny),
+                  let rlData = SafeJSON.data(rlAny),
                   let rl = try? JSONDecoder().decode(RateLimits.self, from: rlData)
             else { continue }
 

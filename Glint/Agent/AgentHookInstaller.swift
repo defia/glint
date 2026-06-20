@@ -149,8 +149,8 @@ enum AgentHookInstaller {
                 } else {
                     root["hooks"] = hooks
                 }
-                if let out = try? JSONSerialization.data(
-                    withJSONObject: root,
+                if let out = SafeJSON.data(
+                    root,
                     options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
                 ) {
                     let mode = posixPermissions(atPath: settingsURL.path)
@@ -262,11 +262,14 @@ enum AgentHookInstaller {
         if !changed { return }
 
         root["hooks"] = hooks
+        guard let data = SafeJSON.data(
+            root,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        ) else {
+            NSLog("[glint] ~/.claude/settings.json: hook tree not serializable, skipping write")
+            return
+        }
         do {
-            let data = try JSONSerialization.data(
-                withJSONObject: root,
-                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-            )
             // Capture the original mode before the atomic write swaps the
             // inode out from under it (0600 when the file is new).
             let mode = posixPermissions(atPath: settingsURL.path)
@@ -291,8 +294,8 @@ enum AgentHookInstaller {
     private static func equalsJSON(_ a: Any?, _ b: Any) -> Bool {
         guard let a else { return false }
         let opts: JSONSerialization.WritingOptions = [.sortedKeys]
-        guard let da = try? JSONSerialization.data(withJSONObject: a, options: opts),
-              let db = try? JSONSerialization.data(withJSONObject: b, options: opts) else {
+        guard let da = SafeJSON.data(a, options: opts),
+              let db = SafeJSON.data(b, options: opts) else {
             return false
         }
         return da == db
@@ -445,8 +448,8 @@ enum CodexHookInstaller {
                 if root.isEmpty {
                     // Whole file was just our hooks → remove it cleanly.
                     try? FileManager.default.removeItem(at: url)
-                } else if let out = try? JSONSerialization.data(
-                    withJSONObject: root,
+                } else if let out = SafeJSON.data(
+                    root,
                     options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
                 ) {
                     let mode = posixPermissions(atPath: url.path)
@@ -513,11 +516,14 @@ enum CodexHookInstaller {
 
         if !changed { return }
         root["hooks"] = hooks
+        guard let data = SafeJSON.data(
+            root,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        ) else {
+            NSLog("[glint] ~/.codex/hooks.json: hook tree not serializable, skipping write")
+            return
+        }
         do {
-            let data = try JSONSerialization.data(
-                withJSONObject: root,
-                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-            )
             // Same mode-preservation dance as the Claude merge above.
             let mode = posixPermissions(atPath: url.path)
             let prev = url.appendingPathExtension("glint-prev")
@@ -537,8 +543,8 @@ enum CodexHookInstaller {
     private static func equalsJSON(_ a: Any?, _ b: Any) -> Bool {
         guard let a else { return false }
         let opts: JSONSerialization.WritingOptions = [.sortedKeys]
-        guard let da = try? JSONSerialization.data(withJSONObject: a, options: opts),
-              let db = try? JSONSerialization.data(withJSONObject: b, options: opts) else {
+        guard let da = SafeJSON.data(a, options: opts),
+              let db = SafeJSON.data(b, options: opts) else {
             return false
         }
         return da == db
