@@ -332,9 +332,21 @@ private struct WorktreePane: View {
             }
             SheetFooter(note: footNote,
                         primary: creating ? "Creating…" : "Create Worktree",
-                        primaryEnabled: canCreate, busy: creating, action: create)
+                        primaryEnabled: canCreate, busy: creating,
+                        disabledHint: createHint, action: create)
         }
         .onAppear(perform: initialDetect)
+    }
+
+    // Why the Create button is disabled — surfaced as its tooltip so a greyed
+    // button isn't a dead end. Ordered by what the user fills in top-to-bottom.
+    private var createHint: LocalizedStringKey {
+        if repoRoot == nil { return "Pick a git repository first." }
+        if branch.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter a name for the new branch." }
+        if branchInvalid { return "That branch name isn’t a valid git ref." }
+        if branchAvailable == false { return "That branch already exists — choose another name." }
+        if branchAvailable == nil { return "Checking the branch name…" }
+        return ""
     }
 
     private var footNote: LocalizedStringKey {
@@ -565,6 +577,9 @@ private struct SheetFooter: View {
     let primary: LocalizedStringKey
     let primaryEnabled: Bool
     let busy: Bool
+    /// Shown as a tooltip on the (disabled) primary button explaining what's
+    /// missing. Ignored while the button is enabled.
+    var disabledHint: LocalizedStringKey? = nil
     let action: () -> Void
     var body: some View {
         HStack {
@@ -588,6 +603,8 @@ private struct SheetFooter: View {
             .buttonStyle(.plain)
             .disabled(!primaryEnabled)
             .keyboardShortcut(.return, modifiers: [])
+            // Tooltip only while disabled — explains what's still missing.
+            .help(primaryEnabled ? "" : (disabledHint ?? ""))
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
         .overlay(alignment: .top) { Rectangle().fill(Theme.divider).frame(height: 1) }

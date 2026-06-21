@@ -3452,6 +3452,61 @@
           }
         }
       }
+    },
+    "Pick a git repository first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先选择一个 git 仓库。"
+          }
+        }
+      }
+    },
+    "Enter a name for the new branch.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先填写新分支的名称。"
+          }
+        }
+      }
+    },
+    "That branch name isn’t a valid git ref.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分支名不是合法的 git 引用。"
+          }
+        }
+      }
+    },
+    "That branch already exists — choose another name.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该分支已存在 —— 请换一个名称。"
+          }
+        }
+      }
+    },
+    "Checking the branch name…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在校验分支名…"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
