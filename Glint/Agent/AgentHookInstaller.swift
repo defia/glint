@@ -341,6 +341,14 @@ enum AgentHookInstaller {
     PANE="${GLINT_PANE_ID:-}"
     SOCK="${GLINT_AGENT_SOCK:-}"
 
+    # Claude (and any future agent that inherits both env vars) takes the
+    # direct route. Codex never enters this branch even if it happens to
+    # inherit PANE+SOCK: keeping the trusted hook command identical for every
+    # Codex pane means Codex's per-command trust hash stays stable, so
+    # `codex trust` only fires once. The tradeoff: a Codex CLI build that
+    # could otherwise be addressed directly still pays the session-extraction
+    # roundtrip. Codex >= 0.130 (which carries session_id in the stdin
+    # payload) is required.
     if [ "$AGENT" != "codex" ] && [ -n "$PANE" ] && [ -n "$SOCK" ]; then
       cat >/dev/null 2>&1
       [ ! -S "$SOCK" ] && exit 0
@@ -361,7 +369,13 @@ enum AgentHookInstaller {
     CWD=$(/usr/bin/plutil -extract cwd raw -o - "$TMP" 2>/dev/null || true)
     /bin/rm -f "$TMP"
     trap - EXIT HUP INT TERM
-    [ -z "$SESSION" ] && exit 0
+    if [ -z "$SESSION" ]; then
+      # No session_id — likely a Codex schema change (camelCase, nested
+      # field) or a payload we couldn't parse. Surface a one-line diagnostic
+      # on stderr so a user staring at a frozen pane has a thread to pull.
+      printf '[glint-hook] %s: missing session_id in payload — pane will not update\\n' "$HOOK" >&2
+      exit 0
+    fi
     SESSION_B64=$(printf '%s' "$SESSION" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
     CWD_B64=$(printf '%s' "$CWD" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
 
@@ -376,6 +390,11 @@ enum AgentHookInstaller {
     if [ -n "$SOCK" ] && [ -S "$SOCK" ]; then
       send_codex_event "$SOCK"
     else
+      # Codex app-server doesn't inherit GLINT_AGENT_SOCK. We don't know which
+      # Glint owns this session, so broadcast to both prod and debug sockets;
+      # whichever app is running picks it up. Both apps may try to bind the
+      # session — the receiver-side claim file (`tryClaimCodexSession`)
+      # serializes them so only one Glint actually owns each session.
       send_codex_event "$HOME/.glint/run/agent.sock"
       send_codex_event "$HOME/.glint/run/agent-debug.sock"
     fi

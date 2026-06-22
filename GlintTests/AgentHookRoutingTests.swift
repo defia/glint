@@ -132,6 +132,96 @@ final class AgentHookRoutingTests: XCTestCase {
         ])
     }
 
+    @MainActor
+    func testCanonicalizeCwdResolvesDarwinPrivateSymlinks() {
+        // Darwin's /tmp -> /private/tmp symlink is the canonical case that
+        // broke first-prompt routing when Codex reported one form and the
+        // pane's OSC 7 reported the other.
+        XCTAssertEqual(
+            WorkspaceStore.canonicalizeCwd("/tmp"),
+            WorkspaceStore.canonicalizeCwd("/private/tmp")
+        )
+        XCTAssertEqual(
+            WorkspaceStore.canonicalizeCwd("/var"),
+            WorkspaceStore.canonicalizeCwd("/private/var")
+        )
+    }
+
+    @MainActor
+    func testCanonicalizeCwdResolvesUserSymlink() throws {
+        let root = URL(
+            fileURLWithPath: "/tmp/gccwd-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let real = root.appendingPathComponent("real-dir", isDirectory: true)
+        let link = root.appendingPathComponent("alias", isDirectory: true)
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertEqual(
+            WorkspaceStore.canonicalizeCwd(real.path),
+            WorkspaceStore.canonicalizeCwd(link.path)
+        )
+    }
+
+    @MainActor
+    func testClaimCodexSessionIsIdempotentForSameProcess() {
+        let session = "claim-\(UUID().uuidString)"
+        defer { WorkspaceStore.releaseCodexSessionClaim(session) }
+
+        XCTAssertTrue(WorkspaceStore.tryClaimCodexSession(session, now: Date()))
+        // Same-process re-claim must succeed (route can be rebuilt after
+        // the routing cache evicts our entry but the file persists).
+        XCTAssertTrue(WorkspaceStore.tryClaimCodexSession(session, now: Date()))
+    }
+
+    @MainActor
+    func testReleaseCodexSessionClaimOnlyDropsOurClaim() throws {
+        let session = "release-\(UUID().uuidString)"
+        XCTAssertTrue(WorkspaceStore.tryClaimCodexSession(session, now: Date()))
+        WorkspaceStore.releaseCodexSessionClaim(session)
+        // Re-claiming after release must succeed because the file is gone.
+        XCTAssertTrue(WorkspaceStore.tryClaimCodexSession(session, now: Date()))
+        WorkspaceStore.releaseCodexSessionClaim(session)
+    }
+
+    func testReporterLogsDiagnosticWhenSessionIdMissing() throws {
+        let root = URL(fileURLWithPath: "/tmp/grm-\(UUID().uuidString)", isDirectory: true)
+        let runDirectory = root.appendingPathComponent(".glint/run", isDirectory: true)
+        let script = root.appendingPathComponent("glint-report.sh")
+        try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
+        try AgentHookInstaller.scriptBody.write(to: script, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let reporter = Process()
+        reporter.executableURL = URL(fileURLWithPath: "/bin/sh")
+        reporter.arguments = [script.path, "PreToolUse", "codex"]
+        var environment = ProcessInfo.processInfo.environment
+        environment["HOME"] = root.path
+        environment.removeValue(forKey: "GLINT_PANE_ID")
+        environment.removeValue(forKey: "GLINT_AGENT_SOCK")
+        reporter.environment = environment
+        let input = Pipe()
+        let stderrPipe = Pipe()
+        reporter.standardInput = input
+        reporter.standardError = stderrPipe
+        try reporter.run()
+        // Payload that doesn't carry session_id — would otherwise drop silently
+        // and leave the pane frozen with no diagnostic.
+        input.fileHandleForWriting.write(Data(#"{"cwd":"/tmp/repo"}"#.utf8))
+        try input.fileHandleForWriting.close()
+        reporter.waitUntilExit()
+        XCTAssertEqual(reporter.terminationStatus, 0)
+
+        let stderr = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        let text = String(data: stderr, encoding: .utf8) ?? ""
+        XCTAssertTrue(
+            text.contains("missing session_id"),
+            "expected stderr diagnostic, got: \(text)"
+        )
+    }
+
     func testReporterPrefersExplicitSocketWithoutBroadcasting() throws {
         let root = URL(fileURLWithPath: "/tmp/gp-\(UUID().uuidString)", isDirectory: true)
         let runDirectory = root.appendingPathComponent(".glint/run", isDirectory: true)
