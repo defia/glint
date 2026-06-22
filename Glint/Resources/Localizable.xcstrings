@@ -1304,7 +1304,17 @@
         }
       }
     },
-    "New Tab": {},
+    "New Tab": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建标签页"
+          }
+        }
+      }
+    },
     "New Workspace": {
       "localizations": {
         "zh-Hans": {
@@ -3576,6 +3586,215 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在校验分支名…"
+          }
+        }
+      }
+    },
+    "New Tab · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建标签页 · %@"
+          }
+        }
+      }
+    },
+    "Open a tab running %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开一个运行 %@ 的标签页"
+          }
+        }
+      }
+    },
+    "Split Right · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向右分屏 · %@"
+          }
+        }
+      }
+    },
+    "Open a pane running %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开一个运行 %@ 的窗格"
+          }
+        }
+      }
+    },
+    "Split pane": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分屏"
+          }
+        }
+      }
+    },
+    "New terminals": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建终端"
+          }
+        }
+      }
+    },
+    "Ask which agent to launch": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建时询问启动哪个 Agent"
+          }
+        }
+      }
+    },
+    "When on, ⌘T / ⌘D / ⌘N and the + button pop a chooser so a new tab, pane, or workspace can start in an agent. Off opens a plain shell.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启后,⌘T / ⌘D / ⌘N 和 + 按钮会弹出选择器,让新建的标签页、窗格或工作区直接在某个 Agent 中启动。关闭则打开普通终端。"
+          }
+        }
+      }
+    },
+    "Return to launch · Esc to cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回车启动 · Esc 取消"
+          }
+        }
+      }
+    },
+    "New Tab (⌘T)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建标签页(⌘T)"
+          }
+        }
+      }
+    },
+    "Advanced": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高级"
+          }
+        }
+      }
+    },
+    "Uncommitted changes in base: %lld.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "base 有 %lld 处未提交改动。"
+          }
+        }
+      }
+    },
+    "Bring these changes into the new worktree": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把这些改动一并带进新工作树"
+          }
+        }
+      }
+    },
+    "Copied in; your original checkout keeps them too.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已复制进去;原始检出里也照常保留。"
+          }
+        }
+      }
+    },
+    "Left in your original checkout; the worktree starts clean at base's HEAD.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "留在原始检出里;工作树从 base 的 HEAD 干净切出。"
+          }
+        }
+      }
+    },
+    "New Workspace · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建工作区 · %@"
+          }
+        }
+      }
+    },
+    "Open a workspace running %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开一个运行 %@ 的工作区"
+          }
+        }
+      }
+    },
+    "Worktree created without your changes": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作树已创建,但未带上你的改动"
+          }
+        }
+      }
+    },
+    "The new worktree is ready, but copying the uncommitted changes failed. They remain in your original checkout.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新工作树已就绪,但复制未提交改动失败。这些改动仍保留在你的原始检出里。"
           }
         }
       }

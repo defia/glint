@@ -28,6 +28,7 @@
 		81532B36FEC3039B8EAD9CB1 /* AgentKindResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EEF00CBEF45A9D60423A207 /* AgentKindResolutionTests.swift */; };
 		930665E39CE84564CBF9D300 /* GlintTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150EEF32284061D527E51866 /* GlintTheme.swift */; };
 		942ED7C1C1A2E823BA52F67A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3023490E670A10EC38870B12 /* Assets.xcassets */; };
+		9F605AB2DC185A94ED28E6D4 /* AgentChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3EB9A1E80F3CC4BCA468774 /* AgentChoice.swift */; };
 		A91EFEF0FEA392A0745724DE /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 89B8883C4456681F07B6D662 /* AppIcon.icon */; };
 		AB89FA6EF5785EC4026F4402 /* VisualEffectBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */; };
 		ABFF3BCAC4AE8CCCAFF89CA0 /* NewWorkspaceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D29C0D2447094B07854C193 /* NewWorkspaceSheet.swift */; };
@@ -36,6 +37,7 @@
 		C0E8D97C08BA3F0FA33F31E7 /* CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 235E2D958A2244483CAA0812 /* CommandPalette.swift */; };
 		C48BD1224EA2C6D3C87B9120 /* AgentPaneSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829D894CF747D6BC08667239 /* AgentPaneSummary.swift */; };
 		C748DE21F23B49B2FFD73DC7 /* WorkspaceIconKindTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E4DF4C5180D50C381B4976 /* WorkspaceIconKindTests.swift */; };
+		C95E09498A4974B811D36575 /* AgentLaunchChooser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C5FD3EEA1ECD40F78394862 /* AgentLaunchChooser.swift */; };
 		CD30F5E1B78B3C46C9990FD6 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8C269A6E9AE87961C3356DC /* SidebarView.swift */; };
 		CD7908F096580864CB2992ED /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BE4DBC7E2579823474466E9 /* ContentView.swift */; };
 		CEA0A8FF66046FEFA80FAC0C /* GlintApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB74659D174004C620D538A /* GlintApp.swift */; };
@@ -65,6 +67,7 @@
 		050E267AE14712D4D6633B4F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		05F2CA2243872C8111048EF2 /* AgentBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBridge.swift; sourceTree = "<group>"; };
 		08FC2FBC9E8729A5ECBF857C /* PaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneView.swift; sourceTree = "<group>"; };
+		0C5FD3EEA1ECD40F78394862 /* AgentLaunchChooser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLaunchChooser.swift; sourceTree = "<group>"; };
 		0D29C0D2447094B07854C193 /* NewWorkspaceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewWorkspaceSheet.swift; sourceTree = "<group>"; };
 		0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevinHookInstallerTests.swift; sourceTree = "<group>"; };
 		150EEF32284061D527E51866 /* GlintTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintTheme.swift; sourceTree = "<group>"; };
@@ -104,6 +107,7 @@
 		E298AD81B1615CBBFD69F48A /* GhosttySurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttySurfaceView.swift; sourceTree = "<group>"; };
 		E94AB23640CA1E6007F8B2B4 /* GlintTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GlintTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EBCC04C19D745AA867D961FD /* PaneAgentKindTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneAgentKindTests.swift; sourceTree = "<group>"; };
+		F3EB9A1E80F3CC4BCA468774 /* AgentChoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChoice.swift; sourceTree = "<group>"; };
 		F5A69ACF962AEDE189F98649 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F8A1F24DAA7220AD4EE961E2 /* UsageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStore.swift; sourceTree = "<group>"; };
 		FC6FFB5185C403F6F44A1687 /* GhosttyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyManager.swift; sourceTree = "<group>"; };
@@ -161,6 +165,7 @@
 		65CB88BAF642F92D3AFF7AB9 /* Chrome */ = {
 			isa = PBXGroup;
 			children = (
+				0C5FD3EEA1ECD40F78394862 /* AgentLaunchChooser.swift */,
 				9E574E2A2735328331FC3C78 /* CloseOnCmdW.swift */,
 				235E2D958A2244483CAA0812 /* CommandPalette.swift */,
 				4BE4DBC7E2579823474466E9 /* ContentView.swift */,
@@ -196,6 +201,7 @@
 			isa = PBXGroup;
 			children = (
 				05F2CA2243872C8111048EF2 /* AgentBridge.swift */,
+				F3EB9A1E80F3CC4BCA468774 /* AgentChoice.swift */,
 				265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */,
 				829D894CF747D6BC08667239 /* AgentPaneSummary.swift */,
 				21868C7211897C87A6CAD7C3 /* ControlBridge.swift */,
@@ -389,7 +395,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */,
+				9F605AB2DC185A94ED28E6D4 /* AgentChoice.swift in Sources */,
 				3932A4CFEFF6FB81AE283645 /* AgentHookInstaller.swift in Sources */,
+				C95E09498A4974B811D36575 /* AgentLaunchChooser.swift in Sources */,
 				C48BD1224EA2C6D3C87B9120 /* AgentPaneSummary.swift in Sources */,
 				5157C5439862F21202BCC44D /* AppDelegate.swift in Sources */,
 				D0C5A885F5B3FE6BD5AFC54A /* CloseOnCmdW.swift in Sources */,

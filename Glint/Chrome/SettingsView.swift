@@ -411,6 +411,14 @@ private struct GeneralPane: View {
             }
         }
 
+        SettingsCard("New terminals") {
+            SettingsRow("Ask which agent to launch",
+                        subtitle: "When on, ⌘T / ⌘D / ⌘N and the + button pop a chooser so a new tab, pane, or workspace can start in an agent. Off opens a plain shell.") {
+                Toggle("", isOn: $store.promptAgentOnNew)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+        }
+
         SettingsCard("Startup") {
             SettingsRow("Collapse sidebar on launch",
                         subtitle: "Start with the sidebar hidden. ⌘/ to toggle.") {

@@ -447,8 +447,20 @@ final class WorkspaceStore: ObservableObject {
     @Published var paneAgentState: [WorkspacePaneKey: PaneAgentState] = [:]
 
     /// Drives the command-palette overlay. Toggled by the toolbar's ⌘
-    /// button and the ⌘⇧P global shortcut.
-    @Published var commandPaletteOpen: Bool = false
+    /// button and the ⌘⇧P global shortcut. Mutually exclusive with the agent
+    /// chooser — opening one dismisses the other so they can't stack.
+    @Published var commandPaletteOpen: Bool = false {
+        didSet { if commandPaletteOpen { agentChooserIntent = nil } }
+    }
+
+    /// The pending "new terminal" action awaiting an agent pick from the chooser
+    /// overlay — non-nil ⇒ the chooser is shown. Set by the `request*` helpers
+    /// when `promptAgentOnNew` is on; cleared by `resolveAgentChooser`. Pops the
+    /// command palette closed so the two overlays never appear at once (e.g. ⌘T
+    /// while the palette is open).
+    @Published var agentChooserIntent: NewTerminalIntent? {
+        didSet { if agentChooserIntent != nil { commandPaletteOpen = false } }
+    }
 
     /// Drives the Settings sheet attached to the main window. We host
     /// Settings inside the window (not as a separate scene) so it
@@ -456,10 +468,8 @@ final class WorkspaceStore: ObservableObject {
     /// of-the-OS.
     @Published var settingsOpen: Bool = false
 
-    /// Drives the New Workspace sheet (source picker: plain / repo / worktree).
+    /// Drives the New Worktree sheet (the worktree-creation window).
     @Published var newWorkspaceSheetOpen: Bool = false
-    /// Which source tab the sheet opens on ("plain" / "repo" / "worktree").
-    @Published var newWorkspaceSheetTab: String = "plain"
     /// Optional repo path to pre-fill the sheet with (e.g. "New Worktree from
     /// Here" on a specific card), overriding the current-workspace guess.
     @Published var newWorkspaceRepoHint: String? = nil
@@ -467,8 +477,11 @@ final class WorkspaceStore: ObservableObject {
     /// confirm dialog (hosted in ContentView) so every entry point — card menu,
     /// command palette — funnels through the same "this deletes files" gate.
     @Published var pendingWorktreeDelete: UUID? = nil
-    func openNewWorkspace(tab: String = "plain", repoHint: String? = nil) {
-        newWorkspaceSheetTab = tab
+    /// Set when a worktree was created but "bring uncommitted changes" failed to
+    /// copy them in. Drives a one-shot warning alert (hosted in ContentView) so
+    /// the failure isn't silent — the changes are untouched in the base checkout.
+    @Published var worktreeCarryFailed: Bool = false
+    func openNewWorkspace(repoHint: String? = nil) {
         newWorkspaceRepoHint = repoHint
         newWorkspaceSheetOpen = true
     }
@@ -596,6 +609,14 @@ final class WorkspaceStore: ObservableObject {
     /// noticeably flatter look. Defaults to on.
     @Published var glassEffect: Bool = (UserDefaults.standard.object(forKey: "glint.glassEffect") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(glassEffect, forKey: "glint.glassEffect") }
+    }
+
+    /// When on, every "instant" new-terminal action (⌘T / ⌘D / ⌘N and the tab
+    /// bar's "+") pops the agent chooser instead of opening a bare shell, so the
+    /// new tab / pane / workspace can start in Claude / Codex / … Default off —
+    /// the fast shell path stays the default. Persisted under glint.promptAgentOnNew.
+    @Published var promptAgentOnNew: Bool = (UserDefaults.standard.object(forKey: "glint.promptAgentOnNew") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(promptAgentOnNew, forKey: "glint.promptAgentOnNew") }
     }
 
     /// UI accent color. Drives focus/selection highlights across the chrome,
@@ -1653,7 +1674,53 @@ final class WorkspaceStore: ObservableObject {
 
     // MARK: pane operations on the current workspace
 
-    func splitFocused(_ direction: SplitDirection) {
+    /// Queue a command to run in a freshly created pane once its surface comes
+    /// up. Reuses the same one-shot channel as the worktree sheet
+    /// (`pendingInitialInput` → `GhosttySurfaceView.initialInput`); a nil/empty
+    /// command leaves the pane a bare shell. Call right after creating the pane,
+    /// before its surface is built, so the lookup finds the entry.
+    private func queueInitialInput(_ command: String?, workspace: UUID, pane: PaneID) {
+        guard let cmd = command, !cmd.isEmpty else { return }
+        let key = WorkspacePaneKey(workspace: workspace, pane: pane)
+        pendingInitialInput[key] = cmd.hasSuffix("\n") ? cmd : cmd + "\n"
+    }
+
+    // MARK: new-terminal entry points (honor the "ask which agent" setting)
+    //
+    // The menu / keyboard / "+" entry points call these instead of newTab /
+    // splitFocused / addWorkspace directly. With `promptAgentOnNew` off they run
+    // immediately (a bare shell, unchanged); with it on they stash the intent and
+    // raise the chooser overlay, which calls `resolveAgentChooser` on pick.
+
+    func requestNewTab() {
+        if promptAgentOnNew { agentChooserIntent = .tab } else { newTab() }
+    }
+
+    func requestSplit(_ direction: SplitDirection) {
+        guard promptAgentOnNew else { splitFocused(direction); return }
+        agentChooserIntent = (direction == .horizontal) ? .splitRight : .splitDown
+    }
+
+    func requestNewWorkspace() {
+        if promptAgentOnNew { agentChooserIntent = .workspace } else { addWorkspace() }
+    }
+
+    /// Resolve the chooser: nil = cancelled (no-op); otherwise run the pending
+    /// action seeded with the picked agent's command (`.shell` → bare shell).
+    func resolveAgentChooser(_ choice: AgentChoice?) {
+        guard let intent = agentChooserIntent else { return }
+        agentChooserIntent = nil
+        guard let choice else { return }
+        let cmd = choice.command
+        switch intent {
+        case .tab:        newTab(agentCommand: cmd)
+        case .splitRight: splitFocused(.horizontal, agentCommand: cmd)
+        case .splitDown:  splitFocused(.vertical, agentCommand: cmd)
+        case .workspace:  addWorkspace(agentCommand: cmd)
+        }
+    }
+
+    func splitFocused(_ direction: SplitDirection, agentCommand: String? = nil) {
         guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
         let new = PaneID(value: workspaces[i].nextPaneSeq)
         workspaces[i].nextPaneSeq += 1
@@ -1665,6 +1732,7 @@ final class WorkspaceStore: ObservableObject {
             newID: new
         ) ?? workspaces[i].tabs[t].root
         workspaces[i].tabs[t].focusedPane = new
+        queueInitialInput(agentCommand, workspace: workspaces[i].id, pane: new)
     }
 
     /// Shells whose presence as the foreground process means "nothing of
@@ -1923,7 +1991,7 @@ final class WorkspaceStore: ObservableObject {
     /// Open a new tab in the current workspace, inheriting the focused pane's
     /// cwd (terminal convention: a new tab opens "here"). Inserts it right
     /// after the current tab and selects it.
-    func newTab() {
+    func newTab(agentCommand: String? = nil) {
         guard let i = currentIndex else { return }
         let inheritedCwd = (workspaces[i].selectedTab?.focusedPane)
             .flatMap { workspaces[i].panes[$0]?.workingDirectory }
@@ -1939,6 +2007,7 @@ final class WorkspaceStore: ObservableObject {
             workspaces[i].tabs.append(tab)
         }
         workspaces[i].selectedTabID = tab.id
+        queueInitialInput(agentCommand, workspace: workspaces[i].id, pane: pane)
     }
 
     /// Close a tab and every pane it holds, cleaning up each pane's surface,
@@ -2176,7 +2245,7 @@ final class WorkspaceStore: ObservableObject {
         workspaces.move(fromOffsets: IndexSet(integer: source), toOffset: offset)
     }
 
-    func addWorkspace() {
+    func addWorkspace(agentCommand: String? = nil) {
         let palette = [
             ("5E5CE6", "•"), ("FF6582", "•"), ("30D158", "•"),
             ("FF9F0A", "•"), ("64D2FF", "•"), ("BF5AF2", "•"),
@@ -2186,6 +2255,8 @@ final class WorkspaceStore: ObservableObject {
         let ws = Workspace.fresh(name: "New workspace", accentHex: pick.0, symbol: pick.1)
         workspaces.append(ws)
         selectedWorkspaceID = ws.id
+        // Workspace.fresh seeds a single pane at PaneID 0.
+        queueInitialInput(agentCommand, workspace: ws.id, pane: PaneID(value: 0))
     }
 
     /// Open a workspace anchored at `directory` (the "Local Repo" source). The
@@ -2193,34 +2264,6 @@ final class WorkspaceStore: ObservableObject {
     /// stub called `addWorkspace()` and dropped the path, landing the user in
     /// their home dir. If the directory is inside a git repo, the source is then
     /// upgraded to `.localRepo` so the git button / worktree actions light up.
-    func openDirectoryWorkspace(_ directory: String) {
-        let expanded = (directory as NSString).expandingTildeInPath
-        guard !expanded.isEmpty else { addWorkspace(); return }
-        let first = PaneID(value: 0)
-        let pane = Pane(id: first, title: "zsh", workingDirectory: expanded)
-        let tab = WorkspaceTab(id: TabID(value: 0), name: nil, root: .leaf(first), focusedPane: first)
-        let ws = Workspace(
-            id: UUID(), name: "New workspace", userNamed: false,
-            accentHex: nextAccentHex(), symbol: "•",
-            tabs: [tab], selectedTabID: tab.id, nextTabSeq: 1,
-            panes: [first: pane], nextPaneSeq: 1,
-            source: WorkspaceSource(kind: .plain))
-        workspaces.append(ws)
-        selectedWorkspaceID = ws.id
-        let id = ws.id
-        Task {
-            guard let root = await git.repoRoot(at: expanded) else { return }
-            let branch = await git.currentBranch(at: root)
-            await MainActor.run {
-                if let i = workspaces.firstIndex(where: { $0.id == id }) {
-                    workspaces[i].source = WorkspaceSource(
-                        kind: .localRepo, repoRoot: root, branch: branch)
-                }
-                refreshGitStatusNow(for: id)
-            }
-        }
-    }
-
     // MARK: - Worktree (Plan B: out-of-band git, never via the terminal)
 
     private func nextAccentHex() -> String {
@@ -2255,11 +2298,22 @@ final class WorkspaceStore: ObservableObject {
     @discardableResult
     func createWorktreeWorkspace(repoRoot: String, baseBranch: String, branch: String,
                                  worktreePath: String, createBranch: Bool = true,
+                                 carryUncommitted: Bool = false,
                                  agentCommand: String?) async throws -> UUID {
         let expanded = (worktreePath as NSString).expandingTildeInPath
         try await git.addWorktree(repo: repoRoot, path: expanded,
                                   newBranch: createBranch ? branch : nil,
                                   base: createBranch ? baseBranch : branch)
+        // Replay base's uncommitted changes into the fresh worktree BEFORE the
+        // workspace (and its agent pane) come up, so the agent never sees a
+        // half-populated tree. A copy hiccup must not fail the whole creation —
+        // the worktree stands and the originals stay in base — but it's surfaced
+        // as a warning rather than swallowed.
+        var carryFailed = false
+        if carryUncommitted {
+            do { try await git.carryWorkingTree(from: repoRoot, to: expanded) }
+            catch { carryFailed = true }
+        }
 
         let first = PaneID(value: 0)
         let pane = Pane(id: first, title: "zsh", workingDirectory: expanded)
@@ -2278,6 +2332,7 @@ final class WorkspaceStore: ObservableObject {
         }
         workspaces.append(ws)
         selectedWorkspaceID = ws.id
+        if carryFailed { worktreeCarryFailed = true }
         await refreshGitStatus(for: ws.id)
         return ws.id
     }

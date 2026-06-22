@@ -107,6 +107,32 @@ struct ContentView: View {
         }
         .animation(.spring(response: 0.28, dampingFraction: 0.82),
                    value: store.commandPaletteOpen)
+        // Agent chooser — same modal language as the command palette: a dim
+        // backdrop that cancels on click-out, then the centered panel.
+        .overlay {
+            if store.agentChooserIntent != nil {
+                Color.black.opacity(0.32)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { store.resolveAgentChooser(nil) }
+                    .transition(.opacity)
+            }
+        }
+        .overlay {
+            if let intent = store.agentChooserIntent {
+                AgentLaunchChooser(intent: intent)
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity
+                                .combined(with: .scale(scale: 0.97))
+                                .combined(with: .offset(y: -8)),
+                            removal: .opacity
+                        )
+                    )
+            }
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.82),
+                   value: store.agentChooserIntent != nil)
         .sheet(isPresented: $store.settingsOpen) {
             GlintSettingsView()
                 .environmentObject(store)
@@ -126,6 +152,15 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) { store.pendingWorktreeDelete = nil }
         } message: {
             Text("Removes the worktree directory from disk. Closing a workspace only drops the UI — this deletes files and can't be undone.")
+        }
+        .alert(
+            "Worktree created without your changes",
+            isPresented: Binding(get: { store.worktreeCarryFailed },
+                                 set: { if !$0 { store.worktreeCarryFailed = false } })
+        ) {
+            Button("OK", role: .cancel) { store.worktreeCarryFailed = false }
+        } message: {
+            Text("The new worktree is ready, but copying the uncommitted changes failed. They remain in your original checkout.")
         }
     }
 
@@ -366,7 +401,7 @@ struct TabBar: View {
                     tabs: ws.tabs.filter { plan.overflowed.contains($0.id) }
                 )
             }
-            NewTabButton { store.newTab() }
+            NewTabButton { store.requestNewTab() }
         }
         .coordinateSpace(name: kTabReorderSpace)
         .onPreferenceChange(ChipFrameKey.self) { chipFrames = $0 }
@@ -429,7 +464,9 @@ private struct ChipFrameKey: PreferenceKey {
 }
 
 /// "+" with a circular hover well, matching the toolbar icons' shape
-/// language inside the glass capsule.
+/// language inside the glass capsule. Routes through `store.requestNewTab()`,
+/// so it opens a bare shell tab directly or pops the agent chooser depending
+/// on the "ask which agent" setting.
 private struct NewTabButton: View {
     let action: () -> Void
     @State private var hovering = false
@@ -1039,8 +1076,8 @@ private struct TabOverflowPopover: View {
     /// two header dropdowns close on the same affordance.
     private var newTabRow: some View {
         Button {
-            store.newTab()
             dismiss()
+            store.requestNewTab()
         } label: {
             HStack(spacing: 10) {
                 ZStack {
@@ -1527,7 +1564,7 @@ private struct WorkspaceSwitcherPopover: View {
     private var newWorkspaceRow: some View {
         Button {
             dismiss()
-            store.openNewWorkspace()
+            store.requestNewWorkspace()
         } label: {
             HStack(spacing: 10) {
                 ZStack {

@@ -196,7 +196,7 @@ struct SidebarView: View {
 
     private var newWorkspaceCard: some View {
         Button {
-            store.openNewWorkspace()
+            store.requestNewWorkspace()
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "plus")
@@ -729,9 +729,9 @@ private struct WorkspaceCard: View {
                 }
             } else {
                 Button("Rename") { startEditing() }
-                Button("New Workspace") { store.openNewWorkspace() }
+                Button("New Workspace") { store.requestNewWorkspace() }
                 Button("New Worktree from Here…") {
-                    store.openNewWorkspace(tab: "worktree", repoHint: wsRepoHint)
+                    store.openNewWorkspace(repoHint: wsRepoHint)
                 }
                 if ws.source.isWorktree {
                     Button("Reveal Worktree in Finder") { store.revealWorktreeInFinder(ws.id) }

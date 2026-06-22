@@ -28,36 +28,18 @@ struct CommandPalette: View {
                 resultList
             }
             .frame(width: 520, height: 420)
-            // Light themes: the frosted glass over a translucent terminal reads
-            // as a muddy mid-grey. A light bgPane scrim (≈white in a light
-            // theme) firms it into a clean card. Dark stays clear so the glass
-            // look is untouched.
+            // Solid `bgPane` card — NO Liquid Glass. The glass material lightens
+            // its backing, which made the palette read lighter than the New
+            // Worktree sheet; that sheet is a flat opaque `bgPane`, so to match
+            // it 1:1 the palette drops the glass and uses the same solid fill.
             .background(
-                (Theme.current.isDark ? Color.clear : Theme.bgPane.opacity(0.55))
+                Theme.bgPane
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            )
-            // Liquid Glass panel on macOS 26 — the palette floats over the
-            // terminal in the same window, exactly the layering glass is
-            // built to refract. Glass draws its own rim light, so the manual
-            // hairline stroke lives only in the fallback.
-            .liquidGlass(enabled: store.glassEffect, cornerRadius: 14,
-                         tint: Theme.glassTint) {
-                ZStack {
-                    VisualEffectBackground(material: .menu)
-                    LinearGradient(
-                        colors: [
-                            Theme.sidebarTintTop.opacity(0.96),
-                            Theme.sidebarTintBottom.opacity(0.96),
-                        ],
-                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Theme.overlay(0.08), lineWidth: 0.5)
                     )
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Theme.overlay(0.08), lineWidth: 0.5)
-                )
-            }
+            )
             .shadow(color: Color.black.opacity(0.5), radius: 30, y: 12)
             .padding(.top, -80) // bias slightly above center
         }
@@ -196,12 +178,27 @@ struct CommandPalette: View {
 
         items.append(.action(
             title: "New Workspace",
-            subtitle: "Pick a source: plain / repo / worktree",
+            subtitle: "Open a fresh workspace",
             symbol: "plus.square",
             shortcut: "",
             tint: actionTint,
-            action: { store.openNewWorkspace() }
+            action: { store.addWorkspace() }
         ))
+        // Per-agent launchers, symmetric with New Tab / Split: the palette is
+        // itself an agent picker, so these create the workspace directly rather
+        // than popping the chooser. Product names stay verbatim.
+        for choice in AgentChoice.allCases where choice.command != nil {
+            let name = choice.rawValue
+            let cmd = choice.command
+            items.append(.action(
+                title: String(format: String(localized: "New Workspace · %@"), name),
+                subtitle: String(format: String(localized: "Open a workspace running %@"), name),
+                symbol: "plus.square",
+                shortcut: "",
+                tint: actionTint,
+                action: { store.addWorkspace(agentCommand: cmd) }
+            ))
+        }
 
         items.append(.action(
             title: "New Worktree Workspace",
@@ -209,7 +206,7 @@ struct CommandPalette: View {
             symbol: "square.on.square.dashed",
             shortcut: "",
             tint: actionTint,
-            action: { store.openNewWorkspace(tab: "worktree") }
+            action: { store.openNewWorkspace() }
         ))
 
         // Worktree actions on the current workspace, only when it is one.
@@ -242,6 +239,21 @@ struct CommandPalette: View {
             tint: actionTint,
             action: { store.newTab() }
         ))
+        // Per-agent launchers: ⌘T / ⌘D open a bare shell; these drop the new
+        // tab / pane straight into an agent. Product names stay verbatim; the
+        // surrounding copy localizes via the format string.
+        for choice in AgentChoice.allCases where choice.command != nil {
+            let name = choice.rawValue
+            let cmd = choice.command
+            items.append(.action(
+                title: String(format: String(localized: "New Tab · %@"), name),
+                subtitle: String(format: String(localized: "Open a tab running %@"), name),
+                symbol: "plus.rectangle.on.rectangle",
+                shortcut: "",
+                tint: actionTint,
+                action: { store.newTab(agentCommand: cmd) }
+            ))
+        }
         // Naming note: the store's `.horizontal` means an HSplit — panes
         // side by side (see PaneTreeView) — which reads inverted as a
         // label. User-facing copy is direction-explicit instead; the enum
@@ -262,6 +274,18 @@ struct CommandPalette: View {
             tint: actionTint,
             action: { store.splitFocused(.vertical) }
         ))
+        for choice in AgentChoice.allCases where choice.command != nil {
+            let name = choice.rawValue
+            let cmd = choice.command
+            items.append(.action(
+                title: String(format: String(localized: "Split Right · %@"), name),
+                subtitle: String(format: String(localized: "Open a pane running %@"), name),
+                symbol: "rectangle.split.2x1",
+                shortcut: "",
+                tint: actionTint,
+                action: { store.splitFocused(.horizontal, agentCommand: cmd) }
+            ))
+        }
         items.append(.action(
             title: "Close Pane",
             subtitle: "Close the focused pane",
