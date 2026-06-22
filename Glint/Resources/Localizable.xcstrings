@@ -1084,6 +1084,17 @@
         }
       }
     },
+    "Hook config": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hook 配置"
+          }
+        }
+      }
+    },
     "Hook script": {
       "extractionState": "stale",
       "localizations": {

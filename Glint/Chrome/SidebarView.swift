@@ -1351,8 +1351,9 @@ private struct OpenCodeMascotIcon: View {
 }
 
 /// Devin's hexagonal logo, rendered per-status as tinted static PNGs —
-/// same pattern as OpenCode. The status dot beacon handles visual state
-/// indication; the tinted variants give a subtle at-a-glance cue.
+/// same pattern as OpenCode: the per-status tint carries the state cue, so
+/// the corner status dot is suppressed for Devin in `WorkspaceCard` (see the
+/// `!isOpenCode && !isDevin` guard) rather than double-encoding the state.
 private struct DevinMascotIcon: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let status: PaneAgentStatus?
