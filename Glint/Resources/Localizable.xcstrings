@@ -4216,6 +4216,94 @@
           }
         }
       }
+    },
+    "Invalid hooks.json": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hooks.json 无效"
+          }
+        }
+      }
+    },
+    "Invalid auth.json": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "auth.json 无效"
+          }
+        }
+      }
+    },
+    "Could not create the Glint reporter script.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法创建 Glint 上报脚本。"
+          }
+        }
+      }
+    },
+    "Could not create the Codex Home directory: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法创建 Codex Home 目录:%@"
+          }
+        }
+      }
+    },
+    "Invalid hooks.json. The file was not modified.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hooks.json 无效,文件未被修改。"
+          }
+        }
+      }
+    },
+    "The hook configuration cannot be encoded as JSON.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "钩子配置无法编码为 JSON。"
+          }
+        }
+      }
+    },
+    "Could not read hooks.json: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取 hooks.json:%@"
+          }
+        }
+      }
+    },
+    "Could not write hooks.json: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法写入 hooks.json:%@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

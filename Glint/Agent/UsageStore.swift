@@ -502,7 +502,7 @@ enum CodexLiveReader {
         guard FileManager.default.fileExists(atPath: path.path) else { return .missing }
         guard let data = try? Data(contentsOf: path),
               (try? JSONDecoder().decode(Auth.self, from: data)) != nil else {
-            return .invalid("Invalid auth.json")
+            return .invalid(String(localized: "Invalid auth.json"))
         }
         return .found
     }
