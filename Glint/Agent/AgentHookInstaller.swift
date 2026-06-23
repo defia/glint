@@ -462,7 +462,7 @@ enum CodexHookInstaller {
         guard FileManager.default.fileExists(atPath: url.path) else { return .notInstalled }
         guard let data = try? Data(contentsOf: url),
               (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) != nil else {
-            return .error("Invalid hooks.json")
+            return .error(String(localized: "Invalid hooks.json"))
         }
         return isInstalled(in: codexHome) ? .installed : .notInstalled
     }
@@ -664,12 +664,12 @@ enum CodexHookInstallerError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .reporterUnavailable: return "Could not create the Glint reporter script."
-        case .cannotCreateHome(let detail): return "Could not create the Codex Home directory: \(detail)"
-        case .invalidHooksJSON: return "Invalid hooks.json. The file was not modified."
-        case .invalidHookTree: return "The hook configuration cannot be encoded as JSON."
-        case .readFailed(let detail): return "Could not read hooks.json: \(detail)"
-        case .writeFailed(let detail): return "Could not write hooks.json: \(detail)"
+        case .reporterUnavailable: return String(localized: "Could not create the Glint reporter script.")
+        case .cannotCreateHome(let detail): return String(localized: "Could not create the Codex Home directory: \(detail)")
+        case .invalidHooksJSON: return String(localized: "Invalid hooks.json. The file was not modified.")
+        case .invalidHookTree: return String(localized: "The hook configuration cannot be encoded as JSON.")
+        case .readFailed(let detail): return String(localized: "Could not read hooks.json: \(detail)")
+        case .writeFailed(let detail): return String(localized: "Could not write hooks.json: \(detail)")
         }
     }
 }
