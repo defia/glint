@@ -37,6 +37,13 @@ enum ReleaseNotes {
     /// A pre-release build carries a `-beta.N` suffix; a stable build does not.
     static func isBeta(_ v: String) -> Bool { v.contains("-") }
 
+    /// Display form of a version string: "v0.1.24" for a numeric version, the
+    /// raw string otherwise (e.g. "dev"). Shared by the What's New card and the
+    /// About pane so the two can't drift.
+    static func displayVersion(_ v: String) -> String {
+        v.first?.isNumber == true ? "v\(v)" : v
+    }
+
     /// Newest first. Add a new entry at the top each beta.
     static let all: [ReleaseNote] = [
         ReleaseNote(
@@ -53,7 +60,8 @@ enum ReleaseNotes {
     ]
 
     /// Distinct base versions present in `all`, newest-authored first.
-    private static var baseVersions: [String] {
+    /// Derived purely from the immutable `all` table, so compute it once.
+    private static let baseVersions: [String] = {
         var seen = Set<String>()
         var result: [String] = []
         for note in all {
@@ -61,7 +69,7 @@ enum ReleaseNotes {
             if seen.insert(b).inserted { result.append(b) }
         }
         return result
-    }
+    }()
 
     /// Roll every entry belonging to `base` (its betas, plus any direct stable
     /// entry) up into ONE note — oldest authored first, so beta.1's lines precede
@@ -92,43 +100,58 @@ enum ReleaseNotes {
             // Betas of this version only, newest-first.
             let base = baseVersion(current)
             let betas = all.filter { isBeta($0.version) && baseVersion($0.version) == base }
-            guard let currentIdx = betas.firstIndex(where: { $0.version == current }) else {
-                return []
-            }
-            // Stop just before the last-seen beta of this version; if the
-            // last-seen build was something else (older version / stable), show
-            // the whole cycle up to current.
-            let endIdx = lastSeen
-                .flatMap { ls in betas.firstIndex(where: { $0.version == ls }) }
-                ?? betas.count
-            guard currentIdx < endIdx else { return [] }
-            return Array(betas[currentIdx..<endIdx])
+            // Compared by full pre-release version. A current with no authored
+            // entry yet is treated as the newest, so earlier betas of the cycle
+            // still surface. Unknown last-seen (came from an older version /
+            // stable) ⇒ the whole cycle, which is naturally bounded to this base.
+            let slice = window(betas, key: { $0.version },
+                               current: current, lastSeen: lastSeen,
+                               fallbackEnd: { _ in betas.count })
+            return slice
         }
-        let bases = baseVersions
-        guard let currentIdx = bases.firstIndex(of: current) else { return [] }
-        // Older bases sit at higher indices; stop just before the last-seen
-        // base (so a beta→stable hop within the same version doesn't re-show it).
-        // Unknown last-seen ⇒ whole tail.
-        let endIdx = lastSeen.map(baseVersion)
-            .flatMap { bases.firstIndex(of: $0) }
-            ?? bases.count
+        // STABLE: one aggregated card per base version. Compared by base, so a
+        // beta→stable hop within the same version doesn't re-show it. Unknown or
+        // pruned last-seen ⇒ only the current version (don't dump the whole
+        // history), via the `currentIdx + 1` fallback.
+        let slice = window(baseVersions, key: { $0 },
+                           current: current, lastSeen: lastSeen.map(baseVersion),
+                           fallbackEnd: { $0 + 1 })
+        return slice.compactMap { aggregatedStableNote(base: $0) }
+    }
+
+    /// Slice an ordered (newest-first) list to the window strictly between the
+    /// current entry and the last-seen one: indices `[currentIdx ..< endIdx)`.
+    /// - `current` absent ⇒ treated as newest (index 0), so an as-yet-unauthored
+    ///   running version still surfaces everything authored after `lastSeen`.
+    /// - `lastSeen` absent ⇒ `fallbackEnd(currentIdx)` bounds the window (callers
+    ///   choose: whole cycle for betas, just the current version for stable).
+    private static func window<T>(_ items: [T],
+                                  key: (T) -> String,
+                                  current: String,
+                                  lastSeen: String?,
+                                  fallbackEnd: (Int) -> Int) -> [T] {
+        guard !items.isEmpty else { return [] }
+        let currentIdx = items.firstIndex { key($0) == current } ?? 0
+        let endIdx = lastSeen
+            .flatMap { ls in items.firstIndex { key($0) == ls } }
+            ?? fallbackEnd(currentIdx)
         guard currentIdx < endIdx else { return [] }
-        return bases[currentIdx..<endIdx].compactMap { aggregatedStableNote(base: $0) }
+        return Array(items[currentIdx..<endIdx])
     }
 
     /// Manual "What's New" (Settings ▸ About): the note for the exact running
-    /// version — a beta's own card, or a stable version's rolled-up card — with
-    /// the latest version's stable rollup as a fallback for local "dev" builds.
+    /// version — a beta's own card, or a stable version's rolled-up card. A
+    /// real version with no authored entry returns [] rather than borrowing
+    /// another version's note (which would mislabel it); only a local non-numeric
+    /// build (e.g. "dev") falls back to the latest version so it can be previewed.
     static func currentOrLatest(version: String) -> [ReleaseNote] {
         if isBeta(version) {
-            if let exact = all.first(where: { $0.version == version }) { return [exact] }
-        } else if let note = aggregatedStableNote(base: baseVersion(version)) {
-            return [note]
+            return all.first(where: { $0.version == version }).map { [$0] } ?? []
         }
-        if let latest = all.first,
-           let note = aggregatedStableNote(base: baseVersion(latest.version)) {
-            return [note]
-        }
-        return []
+        if let note = aggregatedStableNote(base: baseVersion(version)) { return [note] }
+        guard version.first?.isNumber != true else { return [] }
+        return all.first
+            .flatMap { aggregatedStableNote(base: baseVersion($0.version)) }
+            .map { [$0] } ?? []
     }
 }

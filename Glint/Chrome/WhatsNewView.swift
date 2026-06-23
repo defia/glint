@@ -51,10 +51,9 @@ struct WhatsNewView: View {
         .focused($focused)
         .focusEffectDisabled()
         .onKeyPress(.escape) { store.dismissWhatsNew(); return .handled }
-        .onAppear {
-            NSApp.keyWindow?.makeFirstResponder(nil)
-            DispatchQueue.main.async { focused = true }
-        }
+        // `modalOverlay` already took keys off the prior responder; just claim
+        // focus so Esc / the default action land here.
+        .onAppear { DispatchQueue.main.async { focused = true } }
     }
 
     // MARK: - Pieces
@@ -71,7 +70,7 @@ struct WhatsNewView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Theme.text1)
                 // "Glint · v0.1.24" — brand + version are data, never localized.
-                Text(verbatim: "Glint · \(versionLabel(notes.first?.version ?? ""))")
+                Text(verbatim: "Glint · \(ReleaseNotes.displayVersion(notes.first?.version ?? ""))")
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(Theme.text4)
             }
@@ -85,7 +84,7 @@ struct WhatsNewView: View {
     private func section(_ note: ReleaseNote) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             if multiVersion {
-                Text(verbatim: versionLabel(note.version))
+                Text(verbatim: ReleaseNotes.displayVersion(note.version))
                     .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                     .foregroundStyle(store.accent)
                     .textCase(.uppercase)
@@ -127,10 +126,5 @@ struct WhatsNewView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-    }
-
-    /// "v0.1.24" for a numeric version; raw string otherwise (e.g. "dev").
-    private func versionLabel(_ v: String) -> String {
-        v.first?.isNumber == true ? "v\(v)" : v
     }
 }

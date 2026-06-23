@@ -59,6 +59,7 @@
 		F6AFF715FCE5357CEB07683D /* SettingsSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */; };
 		F7ABF70CD455143BF89B89B3 /* SafeJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E2B9ADF809766CE4278047 /* SafeJSON.swift */; };
 		FCB67525DF16A4DCF9B2AF7A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 376568363043C189904E4E0A /* Localizable.xcstrings */; };
+		FE527C4220DD46528255F14E /* ModalOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C11B3335E47DDAF77A883064 /* ModalOverlay.swift */; };
 		FEBC3158CB471E9ABDF931BB /* CodexUsageReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -119,6 +120,7 @@
 		9E982534C8CF6270BCF39106 /* ReviewWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewWindow.swift; sourceTree = "<group>"; };
 		A8C269A6E9AE87961C3356DC /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectBackground.swift; sourceTree = "<group>"; };
+		C11B3335E47DDAF77A883064 /* ModalOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalOverlay.swift; sourceTree = "<group>"; };
 		C9E2B9ADF809766CE4278047 /* SafeJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeJSON.swift; sourceTree = "<group>"; };
 		DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSafety.swift; sourceTree = "<group>"; };
 		E298AD81B1615CBBFD69F48A /* GhosttySurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttySurfaceView.swift; sourceTree = "<group>"; };
@@ -195,6 +197,7 @@
 				4BE4DBC7E2579823474466E9 /* ContentView.swift */,
 				54663E213FE879B96C0D80E7 /* GitStatusPopover.swift */,
 				150EEF32284061D527E51866 /* GlintTheme.swift */,
+				C11B3335E47DDAF77A883064 /* ModalOverlay.swift */,
 				0D29C0D2447094B07854C193 /* NewWorkspaceSheet.swift */,
 				6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */,
 				A8C269A6E9AE87961C3356DC /* SidebarView.swift */,
@@ -445,6 +448,7 @@
 				B1DE20B081ACC4536DBD2089 /* GitStatusPopover.swift in Sources */,
 				CEA0A8FF66046FEFA80FAC0C /* GlintApp.swift in Sources */,
 				930665E39CE84564CBF9D300 /* GlintTheme.swift in Sources */,
+				FE527C4220DD46528255F14E /* ModalOverlay.swift in Sources */,
 				ABFF3BCAC4AE8CCCAFF89CA0 /* NewWorkspaceSheet.swift in Sources */,
 				21C03B3AE912F4D30FA6F92C /* PaneAgentState.swift in Sources */,
 				7D07A40DF6411A613624827A /* PaneSurfaceRepresentable.swift in Sources */,

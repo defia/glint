@@ -142,7 +142,7 @@ struct GlintSettingsView: View {
         let v = info?["CFBundleShortVersionString"] as? String ?? "0.0"
         // Local builds carry the non-numeric placeholder "dev" (CI stamps the
         // real version at release) — a "v" prefix only makes sense on numbers.
-        return v.first?.isNumber == true ? "v\(v)" : v
+        return ReleaseNotes.displayVersion(v)
     }
 }
 
@@ -1970,8 +1970,7 @@ private struct AboutPane: View {
         let info = Bundle.main.infoDictionary
         let v = info?["CFBundleShortVersionString"] as? String ?? "0.0"
         let b = info?["CFBundleVersion"] as? String ?? "0"
-        let display = v.first?.isNumber == true ? "v\(v)" : v
-        return "\(display) (\(b))"
+        return "\(ReleaseNotes.displayVersion(v)) (\(b))"
     }
     private var bundleID: String {
         Bundle.main.bundleIdentifier ?? "app.glint.Glint"
@@ -1995,7 +1994,7 @@ private struct AboutPane: View {
     private var buildChannel: BuildChannel {
         guard isReleaseBuild else { return .localDev }
         let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? ""
-        return version.contains("-") ? .beta : .stable
+        return ReleaseNotes.isBeta(version) ? .beta : .stable
     }
 
     private var buildChannelLabel: String {

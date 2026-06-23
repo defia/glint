@@ -2671,9 +2671,10 @@ final class WorkspaceStore: ObservableObject {
     }
 
     /// Run once on launch. Pops the What's New card when the app version changed
-    /// since it was last seen; on the very first launch it silently records the
-    /// current version (a brand-new user shouldn't get an "update" card). Either
-    /// way the seen-version mark is advanced so it shows at most once per upgrade.
+    /// since it was last seen. The seen-mark is advanced only when we've actually
+    /// shown (or deliberately seeded) — never when a version-change produced no
+    /// card — so a note added in a later build still pops the next launch instead
+    /// of being silently burned.
     func evaluateWhatsNewOnLaunch() {
         guard !whatsNewEvaluated else { return }
         whatsNewEvaluated = true
@@ -2686,11 +2687,29 @@ final class WorkspaceStore: ObservableObject {
         let key = Self.whatsNewVersionKey
         let lastSeen = UserDefaults.standard.string(forKey: key)
         guard lastSeen != current else { return }   // already shown for this build
-        defer { UserDefaults.standard.set(current, forKey: key) }   // mark seen
-        guard let lastSeen else { return }          // first ever launch → seed only
+        func markSeen() { UserDefaults.standard.set(current, forKey: key) }
+
+        guard let lastSeen else {
+            // No seen-mark yet. An existing user (state.json already on disk) who
+            // upgraded into this feature should still get the running version's
+            // card once — they didn't "just install". A genuine fresh install
+            // (no saved state) is seeded silently. Dev/non-numeric builds never
+            // pop, only seed.
+            if Persistence.hasSavedState, current.first?.isNumber == true {
+                let notes = ReleaseNotes.currentOrLatest(version: current)
+                if !notes.isEmpty { whatsNewNotes = notes }
+            }
+            markSeen()
+            return
+        }
 
         let notes = ReleaseNotes.notesToShow(lastSeen: lastSeen, current: current)
-        if !notes.isEmpty { whatsNewNotes = notes }
+        // Advance the mark only once there's something to show; if this upgrade
+        // has no authored note yet, leave the mark so a later build can still
+        // surface its note rather than losing it to a burned version stamp.
+        guard !notes.isEmpty else { return }
+        whatsNewNotes = notes
+        markSeen()
     }
 
     /// Manual entry point (Settings ▸ About): show the current version's note, or

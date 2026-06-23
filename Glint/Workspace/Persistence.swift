@@ -49,6 +49,15 @@ enum Persistence {
         SupportDir.url?.appendingPathComponent(fileName, isDirectory: false)
     }
 
+    /// Whether a saved state file already exists on disk — i.e. the app has run
+    /// and persisted at least once before this launch. Lets us tell an existing
+    /// user (who upgraded into a new feature) apart from a fresh install, even
+    /// before this launch writes its own first save.
+    static var hasSavedState: Bool {
+        guard let url = fileURL else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
     /// Path of a corrupt state.json that we could NOT move aside (disk full,
     /// permissions). save() refuses to write over it so the only copy of the
     /// user's data is never clobbered. Session-scoped: cleared on next launch.
