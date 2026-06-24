@@ -1,0 +1,74 @@
+name: Bug 反馈
+description: 反馈 Glint 里不符合预期的问题。
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量提供能帮助复现问题的信息。
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题描述
+      description: 发生了什么？如果有期望结果，也可以一起写在这里。
+      placeholder: 比如：打开某个工作区后 Glint 闪退 / 终端显示异常 / AI 状态没有更新。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 如何复现
+      description: 简单写一下触发问题的操作步骤。
+      placeholder: |
+        1. 打开 Glint
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: glint-version
+    attributes:
+      label: Glint 版本
+      description: 可以填写 Glint 里显示的版本，或下载文件名里的版本号。
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS 版本
+      placeholder: macOS 15.5
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: 安装或更新方式
+      options:
+        - brew 安装
+        - 软件内更新
+        - 手动下载 DMG
+        - 源码构建
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 截图或日志
+      description: 可以拖入截图，或粘贴相关日志、崩溃信息。
+      render: shell
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充说明
+      description: 其他你觉得有助于定位问题的信息。
