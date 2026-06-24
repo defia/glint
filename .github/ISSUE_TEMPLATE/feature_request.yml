@@ -1,5 +1,5 @@
-name: Feature request
-description: Suggest an improvement or new capability for Glint.
+name: 功能建议 / Feature request
+description: 建议 Glint 的改进或新功能 / Suggest an improvement or new capability for Glint.
 title: "[Feature]: "
 labels:
   - enhancement
@@ -7,47 +7,48 @@ body:
   - type: markdown
     attributes:
       value: |
+        感谢建议。请先描述你的使用场景或遇到的问题。
         Thanks for suggesting an improvement. Please describe the workflow or problem first.
 
   - type: textarea
     id: problem
     attributes:
-      label: Problem
-      description: What are you trying to do, and what is difficult about it today?
-      placeholder: I want to...
+      label: 问题或场景 / Problem
+      description: 你想完成什么？现在难在哪里？ / What are you trying to do, and what is difficult about it today?
+      placeholder: 我想要... / I want to...
     validations:
       required: true
 
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed solution
-      description: What would you like Glint to do?
+      label: 建议方案 / Proposed solution
+      description: 你希望 Glint 怎么支持？ / What would you like Glint to do?
     validations:
       required: true
 
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
-      description: Have you tried any workaround or another approach?
+      label: 试过的替代方案 / Alternatives considered
+      description: 你是否试过 workaround 或其他做法？ / Have you tried any workaround or another approach?
 
   - type: dropdown
     id: area
     attributes:
-      label: Area
+      label: 相关区域 / Area
       options:
-        - Terminal panes
-        - AI agent workflow
-        - Sidebar and workspace state
-        - Themes and appearance
-        - Installation or updates
-        - Other
+        - 终端窗格 / Terminal panes
+        - AI 代理工作流 / AI agent workflow
+        - 侧边栏和工作区状态 / Sidebar and workspace state
+        - 主题和外观 / Themes and appearance
+        - 安装或更新 / Installation or updates
+        - 其他 / Other
     validations:
       required: true
 
   - type: textarea
     id: context
     attributes:
-      label: Additional context
-      description: Add screenshots, mockups, links, or examples if useful.
+      label: 补充说明 / Additional context
+      description: 可以添加截图、草图、链接或例子。 / Add screenshots, mockups, links, or examples if useful.
