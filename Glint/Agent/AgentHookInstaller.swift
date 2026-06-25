@@ -408,7 +408,7 @@ enum CodexHookInstaller {
     ]
 
     static func isInstalled() -> Bool {
-        configuredHomes().contains { isInstalled(in: $0.resolvedURL) }
+        CodexHomeStore.configuredHomes().contains { isInstalled(in: $0.resolvedURL) }
     }
 
     static func isInstalled(in codexHome: URL) -> Bool {
@@ -449,7 +449,7 @@ enum CodexHookInstaller {
 
     static func installIfNeeded(socketPath: String) {
         guard let scriptPath = AgentHookInstaller.ensureReporterScript() else { return }
-        for home in configuredHomes().filter(\.isEnabled) {
+        for home in CodexHomeStore.configuredHomes().filter(\.isEnabled) {
             do {
                 try mergeCodexHooks(scriptPath: scriptPath, codexHome: home.resolvedURL)
             } catch {
@@ -470,7 +470,7 @@ enum CodexHookInstaller {
     /// itself is shared with Claude, so we only delete it when neither agent
     /// still references it.
     static func uninstall() {
-        for home in configuredHomes() {
+        for home in CodexHomeStore.configuredHomes() {
             try? uninstall(from: home.resolvedURL)
         }
         removeReporterIfUnused()
@@ -607,14 +607,6 @@ enum CodexHookInstaller {
         } catch {
             throw CodexHookInstallerError.writeFailed(error.localizedDescription)
         }
-    }
-
-    private static func configuredHomes(defaults: UserDefaults = .standard) -> [CodexHome] {
-        guard let data = defaults.data(forKey: CodexHomeStore.storageKey),
-              let homes = try? JSONDecoder().decode([CodexHome].self, from: data),
-              !homes.isEmpty else { return [.default] }
-        var seen = Set<URL>()
-        return homes.filter { seen.insert($0.resolvedURL).inserted }
     }
 
     private static func equalsJSON(_ a: Any?, _ b: Any) -> Bool {

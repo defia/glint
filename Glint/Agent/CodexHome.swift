@@ -77,13 +77,20 @@ final class CodexHomeStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if let data = defaults.data(forKey: Self.storageKey),
-           let decoded = try? JSONDecoder().decode([CodexHome].self, from: data),
-           !decoded.isEmpty {
-            homes = Self.deduplicated(decoded)
-        } else {
-            homes = [.default]
-        }
+        homes = Self.configuredHomes(defaults: defaults)
+    }
+
+    /// Read the configured Codex homes straight from `defaults`: decode,
+    /// dedupe by resolved URL, fall back to `[.default]`. The single source
+    /// of this read shape — `init`, `UsageStore`, and `AgentHookInstaller`
+    /// all go through here so the three can't drift (one applying a
+    /// normalization the others miss). `nonisolated`: touches only `defaults`
+    /// and a pure decode.
+    nonisolated static func configuredHomes(defaults: UserDefaults = .standard) -> [CodexHome] {
+        guard let data = defaults.data(forKey: storageKey),
+              let decoded = try? JSONDecoder().decode([CodexHome].self, from: data),
+              !decoded.isEmpty else { return [.default] }
+        return Self.deduplicated(decoded)
     }
 
     var enabledHomes: [CodexHome] {
@@ -140,7 +147,7 @@ final class CodexHomeStore: ObservableObject {
         defaults.set(data, forKey: Self.storageKey)
     }
 
-    private static func deduplicated(_ homes: [CodexHome]) -> [CodexHome] {
+    nonisolated private static func deduplicated(_ homes: [CodexHome]) -> [CodexHome] {
         var seen = Set<URL>()
         return homes.filter { seen.insert($0.resolvedURL).inserted }
     }
