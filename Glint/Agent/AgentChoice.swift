@@ -64,6 +64,11 @@ struct AgentLaunchItem: Identifiable, Hashable {
     /// Resolved shell command typed into the new pane, nil = bare shell. For a
     /// non-default Codex Home this carries a `CODEX_HOME=…` prefix.
     let command: String?
+    /// Resolved CODEX_HOME path for a non-default Codex Home, else nil.
+    /// Persisted on the pane so a restart can re-prefix `codex resume …` with
+    /// the same home — otherwise a non-default-home pane resumes against
+    /// `~/.codex` and loses its session (#45 regression for multi-home).
+    let codexHome: String?
 
     var brandAsset: String? { choice.brandAsset }
 }
@@ -79,7 +84,8 @@ extension AgentLaunchItem {
 
     private static func single(_ choice: AgentChoice) -> AgentLaunchItem {
         AgentLaunchItem(id: choice.id, choice: choice,
-                        title: choice.displayName, subtitle: nil, tag: nil, command: choice.command)
+                        title: choice.displayName, subtitle: nil, tag: nil,
+                        command: choice.command, codexHome: nil)
     }
 
     private static func codexItems(_ homes: [CodexHome]) -> [AgentLaunchItem] {
@@ -106,7 +112,11 @@ extension AgentLaunchItem {
             title: AgentChoice.codex.displayName,
             subtitle: home.path,
             tag: isDefault ? nil : (home.label ?? home.resolvedURL.lastPathComponent),
-            command: codexCommand(for: home)
+            command: codexCommand(for: home),
+            // The default home launches bare (no CODEX_HOME), so there's
+            // nothing to persist; only a non-default home needs to survive a
+            // restart to re-prefix the resume command.
+            codexHome: isDefault ? nil : home.resolvedURL.path
         )
     }
 

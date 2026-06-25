@@ -302,14 +302,16 @@ private struct WorktreePane: View {
         let path = worktreePath
         let base = baseBranch
         let items = AgentLaunchItem.all(codexHomes: codexHomes.homes)
-        let cmd = (items.first { $0.id == agentID } ?? items.first)?.command
+        let picked = items.first { $0.id == agentID } ?? items.first
+        let cmd = picked?.command
+        let home = picked?.codexHome
         let carry = carryDirty
         Task {
             do {
                 try await store.createWorktreeWorkspace(
                     repoRoot: root, baseBranch: base, branch: b,
                     worktreePath: path, createBranch: true,
-                    carryUncommitted: carry, agentCommand: cmd)
+                    carryUncommitted: carry, agentCommand: cmd, codexHome: home)
                 await MainActor.run { creating = false; store.newWorkspaceSheetOpen = false }
             } catch {
                 await MainActor.run { creating = false; errorText = error.localizedDescription }

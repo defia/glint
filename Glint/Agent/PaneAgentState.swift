@@ -52,7 +52,14 @@ enum PaneAgentKind: String, Codable {
     /// downgraded to the fallback form rather than being interpolated into
     /// the TTY string. This keeps the function safe even if a future caller
     /// forgets the outer validation step (the value lands on a real shell).
-    func restoreCommand(sessionId: String?) -> String {
+    ///
+    /// `codexHome` carries the resolved `CODEX_HOME` path a non-default-home
+    /// Codex pane was launched under, so the restart re-prefixes the resume
+    /// command with it. Without this a pane started under e.g. `~/codex-test`
+    /// resumes against the default `~/.codex`, where its session doesn't
+    /// exist (#45 regression for the multi-home feature). nil/default ⇒ no
+    /// prefix. Ignored by every kind other than `.codex`.
+    func restoreCommand(sessionId: String?, codexHome: String? = nil) -> String {
         let validated: String? = sessionId.flatMap {
             PaneAgentKind.isValid(sessionId: $0) ? $0 : nil
         }
@@ -60,12 +67,22 @@ enum PaneAgentKind: String, Codable {
         case .claude:
             return validated.map { "claude --resume \($0)\n" } ?? "claude --continue\n"
         case .codex:
-            return validated.map { "codex resume \($0)\n" } ?? "codex resume --last\n"
+            let prefix = codexHome.map { "CODEX_HOME=\(Self.shellQuoted($0)) " } ?? ""
+            return validated.map { "\(prefix)codex resume \($0)\n" }
+                ?? "\(prefix)codex resume --last\n"
         case .opencode:
             return validated.map { "opencode --session \($0)\n" } ?? "opencode --continue\n"
         case .devin:
             return validated.map { "devin --resume \($0)\n" } ?? "devin --continue\n"
         }
+    }
+
+    /// Single-quote a path for shell assignment. Matches the launch-side
+    /// quoting in `AgentLaunchItem.codexCommand`, so the persisted home
+    /// round-trips byte-for-byte into the resume command.
+    private static func shellQuoted(_ path: String) -> String {
+        if !path.contains("'") { return "'\(path)'" }
+        return "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 }
 
