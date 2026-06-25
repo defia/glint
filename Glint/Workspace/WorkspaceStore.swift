@@ -2496,35 +2496,41 @@ final class WorkspaceStore: ObservableObject {
         if let branchError { throw branchError }
     }
 
+    /// Open the workspace's repo/worktree root in Finder — dive INTO the
+    /// folder, not reveal-and-select it in its parent. Shared by every "open
+    /// in Finder" entry point: the ⌘⇧F shortcut's repo branch, the git popover
+    /// button, the sidebar context item, and the command palette — one action.
     func revealWorktreeInFinder(_ id: UUID) {
         guard let ws = workspaces.first(where: { $0.id == id }),
               let path = ws.source.worktreePath ?? ws.source.repoRoot ?? effectiveGitPath(for: ws)
         else { return }
-        NSWorkspace.shared.activateFileViewerSelecting(
-            [URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])
+        NSWorkspace.shared.open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
     }
 
-    /// Reveal the focused pane's current directory in Finder — the global ⌘⇧F
-    /// shortcut. Cwd-first so it works anywhere (even outside a git repo),
-    /// falling back to the same worktree/repo-root/effective-git chain as
-    /// `revealWorktreeInFinder` when no cwd has been reported yet. Nothing
-    /// resolves ⇒ beep, mirroring `openReview`'s no-op.
-    func revealCurrentInFinder() {
+    /// Open the focused pane's location in Finder — the global ⌘⇧F shortcut.
+    /// A bound repo/worktree workspace reuses `revealWorktreeInFinder` (open
+    /// the bound root). A plain workspace resolves the focused pane's cwd to
+    /// its git toplevel if it's inside a repo, else the cwd — so cd'ing into
+    /// a repo subfolder still opens the repo root. Always dives INTO the
+    /// folder, not reveal-and-select in the parent. Nothing resolves ⇒ beep.
+    func revealCurrentInFinder() async {
         guard let ws = selectedWorkspace else {
             NSSound.beep()
             return
         }
-        let cwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
-        guard let path = cwd
-            ?? ws.source.worktreePath
-            ?? ws.source.repoRoot
-            ?? effectiveGitPath(for: ws)
-        else {
+        // Bound repo/worktree → same action as the git popover button.
+        if ws.source.gitPath != nil {
+            revealWorktreeInFinder(ws.id)
+            return
+        }
+        // Plain workspace → repo root of the focused pane's cwd if it's inside
+        // a repo, else the cwd itself.
+        guard let cwd = (ws.selectedTab?.focusedPane).flatMap({ ws.panes[$0]?.workingDirectory }) else {
             NSSound.beep()
             return
         }
-        NSWorkspace.shared.activateFileViewerSelecting(
-            [URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])
+        let target = await git.repoRoot(at: cwd) ?? cwd
+        NSWorkspace.shared.open(URL(fileURLWithPath: (target as NSString).expandingTildeInPath))
     }
 
     /// Open the read-only Review window for a workspace. Always offers the

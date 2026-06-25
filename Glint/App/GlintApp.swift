@@ -131,10 +131,11 @@ struct GlintApp: App {
                 .disabled(workspaceStore.selectedWorkspace.flatMap {
                     workspaceStore.effectiveGitPath(for: $0)
                 } == nil)
-                // Reveal the focused pane's cwd in Finder from anywhere — even
-                // outside a git repo (unlike Review Changes). Never disabled.
+                // Open the focused pane's location in Finder from anywhere —
+                // inside a repo it opens the repo root, outside it the cwd.
+                // Never disabled (unlike Review Changes).
                 Button("Reveal in Finder") {
-                    workspaceStore.revealCurrentInFinder()
+                    Task { await workspaceStore.revealCurrentInFinder() }
                 }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }
