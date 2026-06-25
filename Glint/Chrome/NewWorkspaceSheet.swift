@@ -242,11 +242,20 @@ private struct WorktreePane: View {
         detecting = true
         Task {
             let root = await store.git.repoRoot(at: target)
-            await MainActor.run { repoRoot = root; detecting = false }
+            await MainActor.run {
+                // Ignore a probe that arrived after the field moved on to a
+                // different repo: a slow earlier detect() must not clobber a
+                // newer one's repoRoot (nor, below, its baseBranch/baseDirty).
+                // Same staleness guard branchChanged() uses for the branch name.
+                guard (repo as NSString).expandingTildeInPath == target else { return }
+                repoRoot = root
+                detecting = false
+            }
             if let root {
                 let cur = await store.git.currentBranch(at: root)
                 let st = try? await store.git.status(at: root)
                 await MainActor.run {
+                    guard (repo as NSString).expandingTildeInPath == target else { return }
                     if let cur { baseBranch = cur }
                     baseDirty = st?.dirtyCount ?? 0
                     if !pathEdited { recomputePath() }
