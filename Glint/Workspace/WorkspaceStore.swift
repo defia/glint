@@ -1257,7 +1257,11 @@ final class WorkspaceStore: ObservableObject {
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
         self.devinHooksInstalled = DevinHookInstaller.isInstalled()
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
-        updateDockBadge()
+        // Defer to the next main-loop tick so this runs after
+        // `applicationDidFinishLaunching`. Hitting `NSApp.dockTile` while
+        // SwiftUI is still boxing `@StateObject` (which is when `init()` runs)
+        // can race against AppKit's `NSApp` setup — see #43 on macOS 15.1.1.
+        DispatchQueue.main.async { [weak self] in self?.updateDockBadge() }
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: .glintAgentEvent,
             object: nil,
@@ -1709,18 +1713,24 @@ final class WorkspaceStore: ObservableObject {
     }
 
     private func clearDockBadge() {
-        guard !dockBadgePaneStatuses.isEmpty || NSApp.dockTile.badgeLabel != nil else { return }
+        // `NSApp` is `NSApplication!` — touching `.dockTile` before AppKit has
+        // wired up the shared instance traps with a Swift IUO unwrap. Bail out
+        // silently in that window (issue #43 reproduces on macOS 15.1.1 where
+        // SwiftUI's `@StateObject` box can run before `NSApp` is set).
+        guard let app = NSApp else { return }
+        guard !dockBadgePaneStatuses.isEmpty || app.dockTile.badgeLabel != nil else { return }
         dockBadgePaneStatuses.removeAll()
         updateDockBadge()
     }
 
     private func updateDockBadge() {
+        guard let app = NSApp else { return }
         guard dockBadgeOnAgentAttention else {
-            NSApp.dockTile.badgeLabel = nil
+            app.dockTile.badgeLabel = nil
             return
         }
         let count = dockBadgePaneStatuses.count
-        NSApp.dockTile.badgeLabel = count == 0 ? nil : "\(count)"
+        app.dockTile.badgeLabel = count == 0 ? nil : "\(count)"
     }
 
     /// True when `key`'s pane is on screen right now: its workspace is the
