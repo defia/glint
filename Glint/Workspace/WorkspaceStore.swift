@@ -1441,11 +1441,18 @@ final class WorkspaceStore: ObservableObject {
                         }
                     }
                     // codexHome is only meaningful while Codex is the
-                    // foreground; drop it the moment it isn't, so a later
-                    // default-Codex launch on this pane can't inherit a stale
-                    // non-default home and resume the wrong session.
+                    // foreground. Clear it ONLY when the pane is back at a
+                    // benign shell — i.e. the user actually exited Codex — not
+                    // when a Codex tool subprocess (git/npm/vim/…) briefly takes
+                    // the foreground pid. Unlike sessionIds (re-stashed by every
+                    // UserPromptSubmit hook above), codexHome has no writer but
+                    // launch, so a premature clear permanently breaks the
+                    // non-default-home resume (#45 multi-home regression) until
+                    // the pane is relaunched. A stale home can't leak anyway:
+                    // the next launch always rewrites codexHome via
+                    // queueInitialInput.
                     if workspaces[i].panes[paneID]?.codexHome != nil,
-                       agentToken != PaneAgentKind.codex.rawValue {
+                       Self.isBenignShellProcessName(name) {
                         workspaces[i].panes[paneID]?.codexHome = nil
                     }
                 }
