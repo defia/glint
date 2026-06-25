@@ -31,6 +31,10 @@ dist/
 *.dmg
 *.zip
 
+# Local one-off diagnostic builds (e.g. the #43 launch-trace zip handed to
+# reporters via a non-`v` release tag). xcarchive + .app + zip live here.
+build-diag/
+
 # Sparkle private signing key — NEVER commit
 sparkle_priv.key
 .sparkle/
