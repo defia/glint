@@ -238,7 +238,11 @@ private struct WorktreePane: View {
 
     private func detect() {
         let target = (repo as NSString).expandingTildeInPath
-        guard !target.isEmpty else { repoRoot = nil; return }
+        // Reset detecting here too: a prior probe may still be in flight with
+        // detecting=true, and its stale MainActor block below is skipped by the
+        // guard (which also skips its `detecting = false`). Without this reset
+        // the spinner would stick after the field is cleared to empty.
+        guard !target.isEmpty else { repoRoot = nil; detecting = false; return }
         detecting = true
         Task {
             let root = await store.git.repoRoot(at: target)
