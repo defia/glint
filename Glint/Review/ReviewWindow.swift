@@ -40,16 +40,18 @@ final class ReviewModel: ObservableObject {
     @Published var loadingFiles = false
     @Published var loadingDiff = false
 
-    private let git = GitService()
+    private let git: GitService
     private var fileLoadToken = 0   // guards against out-of-order file-list loads
     private var diffLoadToken = 0   // guards against out-of-order diff loads
 
-    init(repo: String, title: String, subdir: String? = nil, scopes: [DiffScope]) {
+    init(repo: String, title: String, subdir: String? = nil, scopes: [DiffScope],
+         runner: GitRunner = LocalGitRunner()) {
         self.repo = repo
         self.title = title
         self.subdir = subdir
         self.availableScopes = scopes.isEmpty ? [.workingTree] : scopes
         self.scope = scopes.first ?? .workingTree
+        self.git = GitService(runner: runner)
     }
 
     func reload() async {
@@ -1182,8 +1184,10 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var model: ReviewModel?   // strong ref for the window's lifetime
 
-    func present(repo: String, title: String, subdir: String? = nil, scopes: [DiffScope], store: WorkspaceStore) {
-        let model = ReviewModel(repo: repo, title: title, subdir: subdir, scopes: scopes)
+    func present(repo: String, title: String, subdir: String? = nil,
+                 scopes: [DiffScope], store: WorkspaceStore,
+                 runner: GitRunner = LocalGitRunner()) {
+        let model = ReviewModel(repo: repo, title: title, subdir: subdir, scopes: scopes, runner: runner)
         self.model = model
         let root = ReviewView(model: model)
             .frame(minWidth: 780, minHeight: 480)
