@@ -905,6 +905,23 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
+    /// For a plain (non-git-bound) workspace whose focused pane sits inside a
+    /// git repo, review the whole repository from its root (on, default) or just
+    /// the focused pane's current-directory subtree (off). Git-bound workspaces
+    /// always review at the repo root — their gitPath is already root — so this
+    /// only selects the scope for plain workspaces. See `openReview`.
+    @Published var reviewAtRepoRoot: Bool = (UserDefaults.standard.object(forKey: "glint.reviewAtRepoRoot") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(reviewAtRepoRoot, forKey: "glint.reviewAtRepoRoot") }
+    }
+
+    /// Same choice, independent, for Reveal in Finder (⌘⇧F): reveal the repo
+    /// root (on, default) or the focused pane's cwd (off) for plain workspaces.
+    /// Git-bound workspaces always reveal their bound root. See
+    /// `revealCurrentInFinder`.
+    @Published var revealAtRepoRoot: Bool = (UserDefaults.standard.object(forKey: "glint.revealAtRepoRoot") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(revealAtRepoRoot, forKey: "glint.revealAtRepoRoot") }
+    }
+
     /// NSSound names for the three audio cues, persisted; the defaults are
     /// the original hardcoded chimes.
     @Published var soundPermissionName: String = UserDefaults.standard.string(forKey: "glint.soundPermissionName") ?? "Funk" {
@@ -2496,12 +2513,15 @@ final class WorkspaceStore: ObservableObject {
         if let branchError { throw branchError }
     }
 
+    /// Open the workspace's bound root (worktree/repo) in Finder — dive INTO
+    /// the folder, unified with `revealCurrentInFinder`. Shared by every "Open
+    /// in Finder" entry point: the git popover button, the sidebar context
+    /// item, and the command palette.
     func revealWorktreeInFinder(_ id: UUID) {
         guard let ws = workspaces.first(where: { $0.id == id }),
               let path = ws.source.worktreePath ?? ws.source.repoRoot ?? effectiveGitPath(for: ws)
         else { return }
-        NSWorkspace.shared.activateFileViewerSelecting(
-            [URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])
+        Self.openInFinder(path)
     }
 
     /// Reveal the focused pane's current directory in Finder — the global ⌘⇧F
@@ -2514,24 +2534,36 @@ final class WorkspaceStore: ObservableObject {
             NSSound.beep()
             return
         }
-        let cwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
-        guard let path = cwd
-            ?? ws.source.worktreePath
-            ?? ws.source.repoRoot
-            ?? effectiveGitPath(for: ws)
-        else {
+        let paneCwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
+        // A bound workspace's gitPath is its root (worktree root for a worktree,
+        // repo root for Local Repo) — already known. A plain workspace resolves
+        // the toplevel async. Either way, dive INTO revealAtRepoRoot's target:
+        // the root (on, default) or the focused pane's current directory (off).
+        if let root = ws.source.gitPath {
+            let target = (revealAtRepoRoot || paneCwd == nil) ? root : paneCwd!
+            Self.openInFinder(target)
+            return
+        }
+        let base = paneCwd ?? ws.source.worktreePath ?? ws.source.repoRoot ?? effectiveGitPath(for: ws)
+        guard let base else {
             NSSound.beep()
             return
         }
-        NSWorkspace.shared.activateFileViewerSelecting(
-            [URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])
+        if revealAtRepoRoot {
+            Task {
+                let root = await git.repoRoot(at: base) ?? base
+                await MainActor.run { Self.openInFinder(root) }
+            }
+        } else {
+            Self.openInFinder(base)
+        }
     }
 
     /// Open the read-only Review window for a workspace. Always offers the
     /// working-tree scope; for a worktree with a known base branch it also offers
     /// the whole-branch (`base...HEAD`) scope, so the segmented control appears.
     func openReview(for ws: Workspace) {
-        guard let repo = ws.source.gitPath ?? effectiveGitPath(for: ws) else {
+        guard let cwd = ws.source.gitPath ?? effectiveGitPath(for: ws) else {
             NSSound.beep()
             return
         }
@@ -2539,7 +2571,36 @@ final class WorkspaceStore: ObservableObject {
         if let base = ws.source.baseBranch, !base.isEmpty {
             scopes.append(.branch(base: base))
         }
-        ReviewWindowController.shared.present(repo: repo, title: ws.displayName, scopes: scopes)
+        // A bound workspace's gitPath is its root (worktree/repo) — known, no
+        // async. A plain workspace resolves the toplevel async. Either way
+        // honor reviewAtRepoRoot: whole root (on, default) or the focused pane's
+        // cwd subtree (off, filtered via `subdir`). `repo` is always the root so
+        // fileDiff's root-relative paths resolve — the empty-diff bug stays
+        // fixed by construction.
+        let scopeToRoot = reviewAtRepoRoot
+        if let root = ws.source.gitPath {
+            let subdir = scopeToRoot ? nil : Self.paneSubdir(for: ws, root: root)
+            // Keep the worktree's "repo · branch" identity and append the
+            // reviewed subdir when scoping to it (root mode shows just the
+            // identity), so the title reflects what's actually reviewed.
+            let title = subdir.map { "\(ws.displayName) · \($0)" } ?? ws.displayName
+            ReviewWindowController.shared.present(repo: root, title: title,
+                                                  subdir: subdir, scopes: scopes)
+            return
+        }
+        Task {
+            let root = await git.repoRoot(at: cwd) ?? cwd
+            let subdir = scopeToRoot ? nil : Self.paneSubdir(for: ws, root: root)
+            // Title reflects what's reviewed, not ws.displayName — which for a
+            // plain workspace can be a cwd-derived label that disagrees with the
+            // root Review actually opens.
+            let rootName = (root as NSString).lastPathComponent
+            let reviewTitle = subdir.map { "\(rootName)/\($0)" } ?? rootName
+            await MainActor.run {
+                ReviewWindowController.shared.present(repo: root, title: reviewTitle,
+                                                      subdir: subdir, scopes: scopes)
+            }
+        }
     }
 
     // MARK: - What's New (hand-authored per-version notes; see ReleaseNotes.swift)
@@ -2621,6 +2682,36 @@ final class WorkspaceStore: ObservableObject {
         if let p = ws.source.gitPath { return p }
         return (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
             ?? ws.panes.values.compactMap(\.workingDirectory).first
+    }
+
+    /// Root-relative path of `cwd` under `root`, or nil if `cwd` is the root
+    /// itself or not inside it. Both are normalized (symlinks resolved,
+    /// "."/".." collapsed) before the prefix drop, so a symlinked repo root or
+    /// a "."-laden shell cwd compare correctly. Used to scope Review's file
+    /// list to a subdirectory: e.g. root=/repo, cwd=/repo/src → "src".
+    /// Pure / no instance state, so Review can call it once at open time and
+    /// pass the result down as `subdir`.
+    nonisolated static func subdirPath(root: String, cwd: String) -> String? {
+        let r = URL(fileURLWithPath: root).resolvingSymlinksInPath().standardizedFileURL.path
+        let c = URL(fileURLWithPath: cwd).resolvingSymlinksInPath().standardizedFileURL.path
+        if c == r { return nil }
+        guard c.hasPrefix(r + "/") else { return nil }   // cwd not under root
+        let rel = String(c.dropFirst(r.count + 1))
+        return rel.isEmpty ? nil : rel
+    }
+
+    /// The focused pane's cwd as a root-relative subdir, or nil if the pane has
+    /// no cwd, is at the root, or is outside it. Shared by `openReview` (Review
+    /// subtree filter) for bound and plain workspaces alike.
+    nonisolated static func paneSubdir(for ws: Workspace, root: String) -> String? {
+        guard let paneCwd = (ws.selectedTab?.focusedPane).flatMap({ ws.panes[$0]?.workingDirectory }) else { return nil }
+        return subdirPath(root: root, cwd: paneCwd)
+    }
+
+    /// Open a folder in Finder by diving INTO it (not reveal-and-select in its
+    /// parent). Shared by every Reveal-in-Finder path.
+    static func openInFinder(_ path: String) {
+        NSWorkspace.shared.open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
     }
 
     func gitStatus(for id: UUID) -> GitStatus? { gitStatuses[id] }

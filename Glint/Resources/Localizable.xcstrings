@@ -1799,6 +1799,50 @@
         }
       }
     },
+    "Review Changes at repository root": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在仓库根目录审查变更"
+          }
+        }
+      }
+    },
+    "For plain workspaces whose pane is inside a git repo, review the whole repository instead of just the current directory's subtree.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对于面板位于 git 仓库内的普通工作区，审查整个仓库而非仅当前目录的子树。"
+          }
+        }
+      }
+    },
+    "Reveal in Finder at repository root": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中显示仓库根目录"
+          }
+        }
+      }
+    },
+    "For plain workspaces whose pane is inside a git repo, reveal the repository root instead of the current directory.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对于面板位于 git 仓库内的普通工作区，显示仓库根目录而非当前目录。"
+          }
+        }
+      }
+    },
     "Restore last workspace": {
       "extractionState": "stale",
       "localizations": {

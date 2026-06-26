@@ -409,6 +409,18 @@ private struct GeneralPane: View {
                 Toggle("", isOn: $store.sortCompletedFirst)
                     .toggleStyle(.switch).labelsHidden()
             }
+            SettingsDivider()
+            SettingsRow("Review Changes at repository root",
+                        subtitle: "For plain workspaces whose pane is inside a git repo, review the whole repository instead of just the current directory's subtree.") {
+                Toggle("", isOn: $store.reviewAtRepoRoot)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Reveal in Finder at repository root",
+                        subtitle: "For plain workspaces whose pane is inside a git repo, reveal the repository root instead of the current directory.") {
+                Toggle("", isOn: $store.revealAtRepoRoot)
+                    .toggleStyle(.switch).labelsHidden()
+            }
         }
 
         SettingsCard("New terminals") {

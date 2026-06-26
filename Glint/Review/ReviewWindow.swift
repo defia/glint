@@ -12,6 +12,9 @@ import AppKit
 final class ReviewModel: ObservableObject {
     let repo: String
     let title: String
+    /// Root-relative path to scope the file list to (current-directory review),
+    /// or nil for the whole repo. See `reload`'s prefix filter.
+    let subdir: String?
     let availableScopes: [DiffScope]
 
     @Published var scope: DiffScope { didSet { Task { await reload() } } }
@@ -32,9 +35,10 @@ final class ReviewModel: ObservableObject {
     private var fileLoadToken = 0   // guards against out-of-order file-list loads
     private var diffLoadToken = 0   // guards against out-of-order diff loads
 
-    init(repo: String, title: String, scopes: [DiffScope]) {
+    init(repo: String, title: String, subdir: String? = nil, scopes: [DiffScope]) {
         self.repo = repo
         self.title = title
+        self.subdir = subdir
         self.availableScopes = scopes.isEmpty ? [.workingTree] : scopes
         self.scope = scopes.first ?? .workingTree
     }
@@ -45,8 +49,18 @@ final class ReviewModel: ObservableObject {
         fileLoadToken += 1
         let token = fileLoadToken
         loadingFiles = true
-        let fs = await git.changedFiles(repo: repo, scope: scope)
+        var fs = await git.changedFiles(repo: repo, scope: scope)
         guard token == fileLoadToken else { return }
+        // Scope the file list to the focused pane's subtree when reviewing a
+        // subdirectory. Git reports root-relative paths, so a prefix filter
+        // (exact match for the dir itself, or "<subdir>/" for contents) is
+        // exact and covers tracked + untracked alike. Applied before tree/
+        // combined are built so all three list modes stay consistent. fileDiff
+        // is unaffected — it still runs root-relative paths from `repo` (the
+        // toplevel), which is what makes every diff resolve correctly.
+        if let sub = subdir {
+            fs = fs.filter { $0.path == sub || $0.path.hasPrefix(sub + "/") }
+        }
         loadingFiles = false
         files = fs
         tree = TreeNode.build(fs)
@@ -809,8 +823,8 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var model: ReviewModel?   // strong ref for the window's lifetime
 
-    func present(repo: String, title: String, scopes: [DiffScope]) {
-        let model = ReviewModel(repo: repo, title: title, scopes: scopes)
+    func present(repo: String, title: String, subdir: String? = nil, scopes: [DiffScope]) {
+        let model = ReviewModel(repo: repo, title: title, subdir: subdir, scopes: scopes)
         self.model = model
         let root = ReviewView(model: model)
             .frame(minWidth: 780, minHeight: 480)

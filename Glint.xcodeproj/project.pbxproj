@@ -28,6 +28,7 @@
 		5157C5439862F21202BCC44D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E67CF5D8552AE1F51386161 /* AppDelegate.swift */; };
 		692D1A7D490E07D796535EAA /* UpdaterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4408F9761E584DE2AB6630E2 /* UpdaterController.swift */; };
 		6D74FE6545631EB8193C82E1 /* PaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08FC2FBC9E8729A5ECBF857C /* PaneView.swift */; };
+		7072B8575DB70B2367A7EE1D /* ReviewScopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7F8C1899F93B387843907FF /* ReviewScopeTests.swift */; };
 		7D07A40DF6411A613624827A /* PaneSurfaceRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16137B405E48DBE262A15B6D /* PaneSurfaceRepresentable.swift */; };
 		7FC12666816053BEB64079CB /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 050E267AE14712D4D6633B4F /* Theme.swift */; };
 		81532B36FEC3039B8EAD9CB1 /* AgentKindResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EEF00CBEF45A9D60423A207 /* AgentKindResolutionTests.swift */; };
@@ -124,6 +125,7 @@
 		C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectBackground.swift; sourceTree = "<group>"; };
 		C11B3335E47DDAF77A883064 /* ModalOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalOverlay.swift; sourceTree = "<group>"; };
 		C9E2B9ADF809766CE4278047 /* SafeJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeJSON.swift; sourceTree = "<group>"; };
+		D7F8C1899F93B387843907FF /* ReviewScopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewScopeTests.swift; sourceTree = "<group>"; };
 		DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSafety.swift; sourceTree = "<group>"; };
 		E298AD81B1615CBBFD69F48A /* GhosttySurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttySurfaceView.swift; sourceTree = "<group>"; };
 		E94AB23640CA1E6007F8B2B4 /* GlintTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GlintTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -186,6 +188,7 @@
 				797C4E86D052EF8A68DD9B39 /* PaneSessionIdMigrationTests.swift */,
 				51DE2D7740BD03498A936B62 /* PersistenceRecoveryTests.swift */,
 				2CFFB91CE5C44976A6961F1F /* ReviewDiffParsingTests.swift */,
+				D7F8C1899F93B387843907FF /* ReviewScopeTests.swift */,
 				83E4DF4C5180D50C381B4976 /* WorkspaceIconKindTests.swift */,
 			);
 			path = GlintTests;
@@ -426,6 +429,7 @@
 				3194A1545E36E400BC2C33E6 /* PaneSessionIdMigrationTests.swift in Sources */,
 				E80809A987A07731FF35D01D /* PersistenceRecoveryTests.swift in Sources */,
 				F5AE37B67B17DD61B652E5B6 /* ReviewDiffParsingTests.swift in Sources */,
+				7072B8575DB70B2367A7EE1D /* ReviewScopeTests.swift in Sources */,
 				C748DE21F23B49B2FFD73DC7 /* WorkspaceIconKindTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
