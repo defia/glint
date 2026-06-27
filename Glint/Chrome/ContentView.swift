@@ -165,10 +165,14 @@ struct ContentView: View {
             WhatsNewView(notes: store.whatsNewNotes)
         }
         .onAppear {
-            // Put launch keyboard focus in the terminal instead of the sidebar
-            // search field (see `assertTerminalFocusOnLaunch`).
-            store.assertTerminalFocusOnLaunch()
+            // Order matters: evaluate Whats's New *before* the launch focus
+            // claim. `assertTerminalFocusOnLaunch`'s synchronous modal check
+            // reads `whatsNewNotes`, which `evaluateWhatsNewOnLaunch` populates
+            // — so it must run first, or a launch that opens the upgrade card
+            // would be misread as "no modal" on the sync frame and the focus
+            // claim could steal the card's focus. See PR #60 review.
             store.evaluateWhatsNewOnLaunch()
+            store.assertTerminalFocusOnLaunch()
         }
         .sheet(isPresented: $store.settingsOpen) {
             GlintSettingsView()
