@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 
 // Read-only Review window: a self-managed NSWindow (Glint is a single-WindowGroup
 // app whose main window AppDelegate takes over, so a second editor window can't
@@ -568,6 +569,45 @@ private struct HeaderIconButton: View {
     }
 }
 
+/// One radio item for `RadioHeaderMenu`.
+private struct RadioOption<Value: Hashable> {
+    let value: Value
+    let title: LocalizedStringKey
+    let icon: String   // SF symbol used when this option is NOT the current
+}
+
+/// Borderless-button Menu showing a single header glyph; opens a radio list of
+/// `options`. The currently selected option's leading icon becomes a checkmark,
+/// others show their `icon` SF symbol — empty-string systemImage drifts (drops
+/// the leading column on some macOS builds), so requiring a real symbol keeps
+/// the layout consistent across all toggle menus.
+private struct RadioHeaderMenu<Value: Hashable>: View {
+    @Binding var selection: Value
+    let headerIcon: String
+    let options: [RadioOption<Value>]
+    let help: LocalizedStringKey
+
+    var body: some View {
+        Menu {
+            ForEach(0..<options.count, id: \.self) { i in
+                let opt = options[i]
+                Button { selection = opt.value } label: {
+                    Label(opt.title,
+                          systemImage: selection == opt.value ? "checkmark" : opt.icon)
+                }
+            }
+        } label: {
+            Image(systemName: headerIcon)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(help)
+    }
+}
+
 private struct DiffPaneView: View {
     @ObservedObject var model: ReviewModel
     @AppStorage("glint.review.diffMode") private var modeRaw = DiffMode.unified.rawValue
@@ -596,11 +636,20 @@ private struct DiffPaneView: View {
             hint(String(localized: "Binary file — no text diff"))
         } else if model.diffText.isEmpty {
             hint(String(localized: "No diff for this file"))
+        } else if model.diff.lines.isEmpty {
+            // git emitted only headers (e.g., --ignore-all-space collapsed
+            // every hunk to context for a whitespace-only diff); without this
+            // branch DiffContentView would render an empty LazyVStack with no
+            // indication that the filter is what hid everything.
+            hint(String(localized: "No changes after filter"))
         } else {
             DiffContentView(doc: model.diff, mode: mode, showContext: showContext)
-                // Re-mount on file/mode/context change so the nav cursor and
-                // scroll reset cleanly (avoids needing DiffDocument: Equatable).
-                .id("\(model.selected?.path ?? "")|\(modeRaw)|\(showContext)|\(model.ignoreWhitespace)")
+                // Re-mount on FILE or DATA change only (path / ignoreWhitespace
+                // both change the underlying diff). Mode and showContext are
+                // pure render filters on the same data — keep the view, reset
+                // the nav cursor via .onChange inside, preserve scroll position
+                // so toggling mode doesn't jump the user back to the top.
+                .id("\(model.selected?.path ?? "")|\(model.ignoreWhitespace)")
         }
     }
 
@@ -639,61 +688,40 @@ private struct DiffPaneView: View {
     // Icon color/weight mirrors the main toolbar's settings gear (Theme.text3,
     // .medium), sized up from the original 11.5 so it reads as clearly.
     private var diffModeMenu: some View {
-        Menu {
-            Button { modeRaw = DiffMode.unified.rawValue } label: {
-                Label("Unified", systemImage: mode == .unified ? "checkmark" : "text.alignleft")
-            }
-            Button { modeRaw = DiffMode.split.rawValue } label: {
-                Label("Split", systemImage: mode == .split ? "checkmark" : "rectangle.split.2x1")
-            }
-        } label: {
-            Image(systemName: mode == .unified ? "text.alignleft" : "rectangle.split.2x1")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.secondary)
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help(modeHelp)
+        RadioHeaderMenu(
+            selection: $modeRaw,
+            headerIcon: mode == .unified ? "text.alignleft" : "rectangle.split.2x1",
+            options: [
+                .init(value: DiffMode.unified.rawValue, title: "Unified", icon: "text.alignleft"),
+                .init(value: DiffMode.split.rawValue, title: "Split", icon: "rectangle.split.2x1"),
+            ],
+            help: modeHelp
+        )
     }
 
     private var contextLinesMenu: some View {
-        Menu {
-            Button { showContext = true } label: {
-                Label("Show All", systemImage: showContext ? "checkmark" : "list.bullet")
-            }
-            Button { showContext = false } label: {
-                Label("Changes Only", systemImage: !showContext ? "checkmark" : "line.3.horizontal.decrease")
-            }
-        } label: {
-            Image(systemName: showContext ? "list.bullet" : "line.3.horizontal.decrease")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.secondary)
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help(contextHelp)
+        RadioHeaderMenu(
+            selection: $showContext,
+            headerIcon: showContext ? "list.bullet" : "line.3.horizontal.decrease",
+            options: [
+                .init(value: true, title: "Show All", icon: "list.bullet"),
+                .init(value: false, title: "Changes Only", icon: "line.3.horizontal.decrease"),
+            ],
+            help: contextHelp
+        )
     }
 
     // Toggle --ignore-all-space (indentation/whitespace-only changes → context).
     private var ignoreWSMenu: some View {
-        Menu {
-            Button { model.ignoreWhitespace = false } label: {
-                Label("Show Whitespace", systemImage: !model.ignoreWhitespace ? "checkmark" : "")
-            }
-            Button { model.ignoreWhitespace = true } label: {
-                Label("Ignore Whitespace", systemImage: model.ignoreWhitespace ? "checkmark" : "")
-            }
-        } label: {
-            Image(systemName: model.ignoreWhitespace ? "eye.slash" : "eye")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.secondary)
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help(ignoreWSHelp)
+        RadioHeaderMenu(
+            selection: $model.ignoreWhitespace,
+            headerIcon: model.ignoreWhitespace ? "eye.slash" : "eye",
+            options: [
+                .init(value: false, title: "Show Whitespace", icon: "eye"),
+                .init(value: true, title: "Ignore Whitespace", icon: "eye.slash"),
+            ],
+            help: ignoreWSHelp
+        )
     }
 
     private func hint(_ s: String) -> some View {
@@ -874,61 +902,108 @@ private struct DiffContentView: View {
     let mode: DiffMode
     let showContext: Bool
     private static let maxLines = 6000
-    @State private var cursor = -1   // index into changeAnchors; -1 = not yet jumped
+    @State private var cursor = -1   // index into RenderPlan.anchors; -1 = not yet jumped
 
     var body: some View {
         ScrollViewReader { proxy in
-            let anchors = changeAnchors
+            // Single source of truth — filter + cap + anchors + ids all walk
+            // the same prefix-bounded list ONCE per body eval. Before this
+            // unification, anchors/filteredIds scanned the FULL filtered doc
+            // while the body only rendered prefix(maxLines), so changes past
+            // row 6000 inflated the X/Y counter and silently no-op'd when
+            // Opt+↑/↓ tried to scroll to a row id that was never realized.
+            let plan = renderPlan
             ZStack(alignment: .bottomTrailing) {
-                switch mode {
-                case .unified: unifiedBody()
-                case .split:   splitBody()
+                switch plan.kind {
+                case .unified(let rows): unifiedBody(rows: rows, total: plan.totalCount)
+                case .split(let rows):   splitBody(rows: rows, total: plan.totalCount)
                 }
                 // Next/prev only matters in Show All (Changes Only already lists
                 // just changes), so hide the cluster — and its shortcuts — otherwise.
-                if showContext, !anchors.isEmpty {
-                    navCluster(proxy: proxy, anchors: anchors)
+                if showContext, !plan.anchors.isEmpty {
+                    navCluster(proxy: proxy, anchors: plan.anchors, ids: plan.ids)
                 }
             }
+            // Mode and showContext are render-only filters — keep the view
+            // (preserves scroll position), but reset the cursor because the
+            // anchor list changes shape and the previous index no longer maps
+            // to the same change. File / ignoreWhitespace changes the data and
+            // remounts via .id() at the call site, where @State already resets.
+            .onChange(of: mode) { _, _ in cursor = -1 }
+            .onChange(of: showContext) { _, _ in cursor = -1 }
         }
     }
 
-    // First-row id of each maximal run of changed lines — the anchors next/prev
-    // jumps between. Recomputed from the same filter the body renders.
-    private var changeAnchors: [Int] {
+    private struct RenderPlan {
+        enum Kind {
+            case unified(ArraySlice<DiffLine>)
+            case split(ArraySlice<SplitRow>)
+        }
+        let kind: Kind
+        let anchors: [Int]
+        let ids: [Int]
+        let totalCount: Int   // pre-cap, for "N more lines" truncation footer
+    }
+
+    private var renderPlan: RenderPlan {
         switch mode {
         case .unified:
-            let f = showContext ? doc.lines : doc.lines.filter { $0.kind != .context }
-            return runStarts(f) { $0.kind == .add || $0.kind == .del }
+            let filtered = showContext ? doc.lines : doc.lines.filter { $0.kind != .context }
+            let capped = filtered.prefix(Self.maxLines)
+            var anchors: [Int] = []
+            var ids: [Int] = []
+            ids.reserveCapacity(capped.count)
+            var prev = false
+            for line in capped {
+                ids.append(line.id)
+                let c = line.kind == .add || line.kind == .del
+                if c && !prev { anchors.append(line.id) }
+                prev = c
+            }
+            return RenderPlan(kind: .unified(capped), anchors: anchors, ids: ids, totalCount: filtered.count)
         case .split:
-            let f = showContext ? doc.splitRows : doc.splitRows.filter { !isContextPair($0) }
-            return runStarts(f) { isChangeRow($0) }
+            let filtered = showContext ? doc.splitRows : doc.splitRows.filter { !Self.isContextPair($0) }
+            let capped = filtered.prefix(Self.maxLines)
+            var anchors: [Int] = []
+            var ids: [Int] = []
+            ids.reserveCapacity(capped.count)
+            var prev = false
+            for r in capped {
+                ids.append(r.id)
+                let c = Self.isChangeRow(r)
+                if c && !prev { anchors.append(r.id) }
+                prev = c
+            }
+            return RenderPlan(kind: .split(capped), anchors: anchors, ids: ids, totalCount: filtered.count)
         }
     }
 
-    private func runStarts<T: Identifiable>(_ items: [T], isChange: (T) -> Bool) -> [Int] where T.ID == Int {
-        var out: [Int] = []
-        var prev = false
-        for it in items {
-            let c = isChange(it)
-            if c && !prev { out.append(it.id) }
-            prev = c
-        }
-        return out
-    }
-
-    private func isChangeRow(_ r: SplitRow) -> Bool {
+    private static func isChangeRow(_ r: SplitRow) -> Bool {
         if case .pair(let l, let rg) = r.body {
             return (l?.kind == .add || l?.kind == .del) || (rg?.kind == .add || rg?.kind == .del)
         }
         return false
     }
 
-    private func jump(proxy: ScrollViewProxy, anchors: [Int], delta: Int) {
+    private static func isContextPair(_ r: SplitRow) -> Bool {
+        if case .pair(let l, let rg) = r.body, let l, let rg {
+            return l.kind == .context && rg.kind == .context
+        }
+        return false
+    }
+
+    private func jump(proxy: ScrollViewProxy, anchors: [Int], ids: [Int], delta: Int) {
         guard !anchors.isEmpty else { return }
-        cursor = min(max(cursor + delta, 0), anchors.count - 1)
+        // First press: wrap. Opt+↑ → last change, Opt+↓ → first. Old code
+        // clamped to 0 on first press regardless of direction, so Opt+↑ also
+        // landed on the first change — opposite of GitHub/VS Code's behavior.
+        if cursor < 0 {
+            cursor = delta < 0 ? anchors.count - 1 : 0
+        } else {
+            cursor = min(max(cursor + delta, 0), anchors.count - 1)
+        }
         // Land ~2 lines above the change so it isn't flush against the top edge.
-        let target = offsetTarget(for: anchors[cursor], lead: 2)
+        let target = offsetTarget(for: anchors[cursor], in: ids, lead: 2)
         // Instant scroll (no withAnimation): an animated scrollTo over a
         // LazyVStack forces SwiftUI to realize every row between here and the
         // target each frame — on a whole-file diff (up to 6000 lines) that
@@ -939,27 +1014,17 @@ private struct DiffContentView: View {
     /// id of the row `lead` lines above `anchorId` in the rendered list, clamped
     /// to the top — so a jumped-to change shows a couple lines of lead context
     /// instead of sitting right at the viewport edge.
-    private func offsetTarget(for anchorId: Int, lead: Int) -> Int {
-        let ids = filteredIds
+    private func offsetTarget(for anchorId: Int, in ids: [Int], lead: Int) -> Int {
         guard let pos = ids.firstIndex(of: anchorId) else { return anchorId }
         return ids[max(0, pos - lead)]
     }
 
-    // ids of the filtered rows in render order (same filter the body renders),
-    // used to back the nav up a couple lines from a change.
-    private var filteredIds: [Int] {
-        switch mode {
-        case .unified: return (showContext ? doc.lines : doc.lines.filter { $0.kind != .context }).map(\.id)
-        case .split:   return (showContext ? doc.splitRows : doc.splitRows.filter { !isContextPair($0) }).map(\.id)
-        }
-    }
-
     // Floating prev/next cluster, bottom-trailing — GitHub-style change navigation.
-    private func navCluster(proxy: ScrollViewProxy, anchors: [Int]) -> some View {
+    private func navCluster(proxy: ScrollViewProxy, anchors: [Int], ids: [Int]) -> some View {
         let at = min(max(cursor, 0), anchors.count - 1) + 1
         return HStack(spacing: 2) {
             HeaderIconButton(symbol: "chevron.up", help: "Previous change", size: 11) {
-                jump(proxy: proxy, anchors: anchors, delta: -1)
+                jump(proxy: proxy, anchors: anchors, ids: ids, delta: -1)
             }
             .keyboardShortcut(.upArrow, modifiers: .option)
             Text("\(at)/\(anchors.count)")
@@ -967,7 +1032,7 @@ private struct DiffContentView: View {
                 .foregroundStyle(Theme.text3)
                 .frame(width: 34)
             HeaderIconButton(symbol: "chevron.down", help: "Next change", size: 11) {
-                jump(proxy: proxy, anchors: anchors, delta: 1)
+                jump(proxy: proxy, anchors: anchors, ids: ids, delta: 1)
             }
             .keyboardShortcut(.downArrow, modifiers: .option)
         }
@@ -981,15 +1046,14 @@ private struct DiffContentView: View {
     // MARK: unified (single column)
 
     @ViewBuilder
-    private func unifiedBody() -> some View {
-        let filtered = showContext ? doc.lines : doc.lines.filter { $0.kind != .context }
+    private func unifiedBody(rows: ArraySlice<DiffLine>, total: Int) -> some View {
         let oldW = doc.oldWidth, newW = doc.newWidth
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(prefix(filtered)) { line in
+                ForEach(rows) { line in
                     unifiedRow(line, oldW: oldW, newW: newW).id(line.id)
                 }
-                truncationLabel(filtered.count)
+                truncationLabel(total)
             }
         }
     }
@@ -1035,24 +1099,16 @@ private struct DiffContentView: View {
     // MARK: split (side-by-side)
 
     @ViewBuilder
-    private func splitBody() -> some View {
-        let filtered = showContext ? doc.splitRows : doc.splitRows.filter { !isContextPair($0) }
+    private func splitBody(rows: ArraySlice<SplitRow>, total: Int) -> some View {
         let oldW = doc.oldWidth, newW = doc.newWidth
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(prefix(filtered)) { r in
+                ForEach(rows) { r in
                     splitRow(r, oldW: oldW, newW: newW).id(r.id)
                 }
-                truncationLabel(filtered.count)
+                truncationLabel(total)
             }
         }
-    }
-
-    private func isContextPair(_ r: SplitRow) -> Bool {
-        if case .pair(let l, let rg) = r.body, let l, let rg {
-            return l.kind == .context && rg.kind == .context
-        }
-        return false
     }
 
     @ViewBuilder
@@ -1106,11 +1162,6 @@ private struct DiffContentView: View {
     }
 
     // MARK: shared
-
-    /// Cap a line/row list at `maxLines`; returns the same array when under the cap.
-    private func prefix<T>(_ items: [T]) -> [T] {
-        items.count > Self.maxLines ? Array(items.prefix(Self.maxLines)) : items
-    }
 
     @ViewBuilder
     private func truncationLabel(_ total: Int) -> some View {
@@ -1181,6 +1232,11 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
     private var model: ReviewModel?   // strong ref for the window's lifetime
+    /// Lives for the duration the window is open. Re-applies NSWindow.appearance
+    /// whenever the store bumps `themeRevision`, so a mid-session theme switch
+    /// doesn't leave borderless-menu popups (rendered by AppKit, not SwiftUI)
+    /// resolving label colors against the open-time appearance.
+    private var themeCancellable: AnyCancellable?
 
     func present(repo: String, title: String, subdir: String? = nil, scopes: [DiffScope], store: WorkspaceStore) {
         let model = ReviewModel(repo: repo, title: title, subdir: subdir, scopes: scopes)
@@ -1191,10 +1247,12 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
 
         let w = window ?? makeWindow()
         w.title = title
-        // Follow the selected theme's light/dark like the rest of the app. The
-        // old forced-dark left borderless-menu labels rendering white-on-light
-        // under a light theme (their adaptive label color keyed off colorScheme).
-        w.appearance = NSAppearance(named: Theme.current.isDark ? .darkAqua : .aqua)
+        // Sink fires synchronously with the current value on subscribe (@Published
+        // behavior), so this also seeds the open-time appearance — no need to set
+        // it separately. The same sink handles every subsequent theme switch.
+        themeCancellable = store.$themeRevision.sink { [weak self] _ in
+            self?.window?.appearance = NSAppearance(named: Theme.current.isDark ? .darkAqua : .aqua)
+        }
         // Zero the hosting view's safe-area at the AppKit layer instead of with
         // SwiftUI's `.ignoresSafeArea()`. The modifier makes SwiftUI re-coordinate
         // the titlebar inset on every layout pass, which flickers while resizing
@@ -1218,7 +1276,8 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
         // (and any future drag in content). The hidden-but-present titlebar strip
         // at the top still moves the window.
         w.isMovableByWindowBackground = false
-        w.appearance = NSAppearance(named: .darkAqua)
+        // Appearance is owned by themeCancellable in present() — don't seed
+        // here, otherwise it'd flicker the wrong theme for one frame.
         w.isReleasedWhenClosed = false         // reuse the shell across opens
         // Persist & restore window position/size across launches. AppKit writes
         // the frame to UserDefaults whenever the window moves/resizes; on first
@@ -1231,7 +1290,9 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         // Drop the model so its (now hidden) state isn't kept alive; the window
-        // shell is reused on the next open.
+        // shell is reused on the next open. Drop the theme sink too — present()
+        // resubscribes when the window comes back.
         model = nil
+        themeCancellable = nil
     }
 }

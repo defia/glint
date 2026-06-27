@@ -73,7 +73,10 @@ extension GitService {
             if file.kind == .untracked {
                 // No HEAD side — diff against /dev/null so the whole file shows
                 // as an addition. `--no-index` exits 1 when files differ (normal).
-                let r = try? await git(["diff", "--no-index", "--", "/dev/null", file.path],
+                // Prepend `args` so the toolbar's Show All / Ignore Whitespace
+                // toggles apply uniformly — without this, untracked files were
+                // silently exempt from the menu state.
+                let r = try? await git(args + ["--no-index", "--", "/dev/null", file.path],
                                        cwd: repo, allowFailure: true)
                 return r?.stdout ?? ""
             }

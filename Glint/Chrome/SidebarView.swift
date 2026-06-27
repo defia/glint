@@ -652,6 +652,12 @@ private struct WorkspaceCard: View {
                             store.isRenaming = focused
                             if !focused && isEditing { commitRename() }
                         }
+                        // 兜底:WorkspaceCard 在 isEditing=true 时被外部操作(如
+                        // contextMenu 的 Close Workspace / sidebar 刷新重 id)直接
+                        // 销毁,@FocusState 的 onChange 不一定派发 false。漏掉就
+                        // 让 store.isRenaming 卡 true,ContentView 的 click 监视
+                        // 器会把无关 TextField(侧栏搜索等)的焦点也吹走。
+                        .onDisappear { store.isRenaming = false }
                 } else {
                     Text(ws.displayName)
                         .font(.system(size: 13, weight: active ? .semibold : .medium))

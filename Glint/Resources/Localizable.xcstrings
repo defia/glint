@@ -3909,6 +3909,17 @@
         }
       }
     },
+    "No changes after filter": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用过滤后无改动"
+          }
+        }
+      }
+    },
     "Loading…": {
       "extractionState": "manual",
       "localizations": {

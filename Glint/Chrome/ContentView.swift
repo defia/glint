@@ -775,6 +775,11 @@ private struct TabChip: View {
                         store.isRenaming = focused
                         if !focused && isEditing { commitRename() }
                     }
+                    // 同 WorkspaceCard:tab 被外部销毁(关闭、拖移、workspace 切走)
+                    // 时 @FocusState 的 onChange(false) 不一定派发,得在这里兜
+                    // 一道,否则 store.isRenaming 卡 true 会让 ContentView 的
+                    // click 监视器误吹无关 TextField 的焦点。
+                    .onDisappear { store.isRenaming = false }
             } else {
                 Text(ws.tabDisplayName(tab))
                     .font(.system(size: 12, weight: .medium))
