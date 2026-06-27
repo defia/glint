@@ -122,7 +122,7 @@ final class UsageStore: ObservableObject {
         CodexQuotaPresentation.sidebarItems(
             from: codexHomeStatuses,
             fallback: codex,
-            hasEnabledHomes: Self.configuredCodexHomes().contains(where: \.isEnabled)
+            hasEnabledHomes: CodexHomeStore.configuredHomes().contains(where: \.isEnabled)
         )
     }
 
@@ -196,7 +196,7 @@ final class UsageStore: ObservableObject {
         if codexEnabled {
             let generation = codexRefreshCoordinator.begin()
             Task { [weak self] in
-                let homes = Self.configuredCodexHomes().filter(\.isEnabled)
+                let homes = CodexHomeStore.configuredHomes().filter(\.isEnabled)
                 await MainActor.run {
                     guard let self,
                           self.codexRefreshCoordinator.accepts(generation) else { return }
@@ -258,14 +258,6 @@ final class UsageStore: ObservableObject {
             return quota
         }.first
         apply(quota, to: .codex)
-    }
-
-    nonisolated private static func configuredCodexHomes() -> [CodexHome] {
-        guard let data = UserDefaults.standard.data(forKey: CodexHomeStore.storageKey),
-              let homes = try? JSONDecoder().decode([CodexHome].self, from: data),
-              !homes.isEmpty else { return [.default] }
-        var seen = Set<URL>()
-        return homes.filter { seen.insert($0.resolvedURL).inserted }
     }
 
     /// Publish and persist a fresh snapshot. A `nil` result (transient network
