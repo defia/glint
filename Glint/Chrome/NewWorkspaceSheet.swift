@@ -238,15 +238,28 @@ private struct WorktreePane: View {
 
     private func detect() {
         let target = (repo as NSString).expandingTildeInPath
-        guard !target.isEmpty else { repoRoot = nil; return }
+        // Reset detecting here too: a prior probe may still be in flight with
+        // detecting=true, and its stale MainActor block below is skipped by the
+        // guard (which also skips its `detecting = false`). Without this reset
+        // the spinner would stick after the field is cleared to empty.
+        guard !target.isEmpty else { repoRoot = nil; detecting = false; return }
         detecting = true
         Task {
             let root = await store.git.repoRoot(at: target)
-            await MainActor.run { repoRoot = root; detecting = false }
+            await MainActor.run {
+                // Ignore a probe that arrived after the field moved on to a
+                // different repo: a slow earlier detect() must not clobber a
+                // newer one's repoRoot (nor, below, its baseBranch/baseDirty).
+                // Same staleness guard branchChanged() uses for the branch name.
+                guard (repo as NSString).expandingTildeInPath == target else { return }
+                repoRoot = root
+                detecting = false
+            }
             if let root {
                 let cur = await store.git.currentBranch(at: root)
                 let st = try? await store.git.status(at: root)
                 await MainActor.run {
+                    guard (repo as NSString).expandingTildeInPath == target else { return }
                     if let cur { baseBranch = cur }
                     baseDirty = st?.dirtyCount ?? 0
                     if !pathEdited { recomputePath() }
@@ -302,14 +315,16 @@ private struct WorktreePane: View {
         let path = worktreePath
         let base = baseBranch
         let items = AgentLaunchItem.all(codexHomes: codexHomes.homes)
-        let cmd = (items.first { $0.id == agentID } ?? items.first)?.command
+        let picked = items.first { $0.id == agentID } ?? items.first
+        let cmd = picked?.command
+        let home = picked?.codexHome
         let carry = carryDirty
         Task {
             do {
                 try await store.createWorktreeWorkspace(
                     repoRoot: root, baseBranch: base, branch: b,
                     worktreePath: path, createBranch: true,
-                    carryUncommitted: carry, agentCommand: cmd)
+                    carryUncommitted: carry, agentCommand: cmd, codexHome: home)
                 await MainActor.run { creating = false; store.newWorkspaceSheetOpen = false }
             } catch {
                 await MainActor.run { creating = false; errorText = error.localizedDescription }

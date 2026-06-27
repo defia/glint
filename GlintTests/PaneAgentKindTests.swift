@@ -106,6 +106,28 @@ final class PaneAgentKindTests: XCTestCase {
                        "codex resume --last\n")
     }
 
+    // MARK: restoreCommand — non-default Codex Home prefix
+
+    func testRestoreCommandCodexHomePrefixesResume() {
+        // A non-default-home Codex pane must re-prefix its resume command with
+        // the same CODEX_HOME it launched under, or restart resumes against
+        // ~/.codex where the session doesn't exist (#45 for multi-home).
+        let home = "/Users/test/codex-secondary"
+        XCTAssertEqual(PaneAgentKind.codex.restoreCommand(sessionId: "abc-123", codexHome: home),
+                       "CODEX_HOME='\(home)' codex resume abc-123\n")
+        // Fallback form (--last) carries the prefix too.
+        XCTAssertEqual(PaneAgentKind.codex.restoreCommand(sessionId: nil, codexHome: home),
+                       "CODEX_HOME='\(home)' codex resume --last\n")
+    }
+
+    func testRestoreCommandCodexHomeIgnoredForDefaultAndOtherKinds() {
+        // Default home (nil) ⇒ no prefix; other agents ignore the home entirely.
+        XCTAssertEqual(PaneAgentKind.codex.restoreCommand(sessionId: "abc-123", codexHome: nil),
+                       "codex resume abc-123\n")
+        XCTAssertEqual(PaneAgentKind.claude.restoreCommand(sessionId: "abc-123", codexHome: "/x"),
+                       "claude --resume abc-123\n")
+    }
+
     // MARK: helpers
 
     /// WorkspaceIconKind isn't Equatable, so compare by matching the expected

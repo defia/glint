@@ -164,13 +164,21 @@ final class GhosttyManager {
     /// inside this lower layer.
     private func applyGlintTheme(_ cfg: ghostty_config_t) {
         let defaults = UserDefaults.standard
-        let family = defaults.string(forKey: "glint.terminalFontFamily") ?? "SF Mono"
+        // ghostty config 是 key=value 的逐行格式;value 后续直到行尾都被吸进 value。
+        // 字体家族名直接插值,因此任何嵌入的换行/回车都会把后面的行篡改成新指令。
+        // 通常来源(下拉)永远不会带控制字符,但 UserDefaults 是用户可写的,所以
+        // 在拼 config 前一律剥掉控制字符,堵住注入面。
+        let family = sanitizeConfigValue(defaults.string(forKey: "glint.terminalFontFamily")) ?? "SF Mono"
         let size: Double = {
             let v = defaults.double(forKey: "glint.terminalFontSize")
             return v == 0 ? 13 : v
         }()
         let bold = (defaults.object(forKey: "glint.terminalFontBold") as? Bool) ?? false
-        let cursorStyle = defaults.string(forKey: "glint.terminalCursorStyle") ?? "block"
+        let cjkFamily = sanitizeConfigValue(defaults.string(forKey: "glint.terminalCJKFontFamily")) ?? ""
+        // 三选一白名单 —— UserDefaults 是用户可写的,塞进去任意串都不能让我们
+        // 写出畸形或被注入的 config 行。落回 "block" 比静默接受随机串更安全。
+        let cursorStyleRaw = defaults.string(forKey: "glint.terminalCursorStyle") ?? "block"
+        let cursorStyle = ["block", "bar", "underline"].contains(cursorStyleRaw) ? cursorStyleRaw : "block"
         let cursorBlink = (defaults.object(forKey: "glint.terminalCursorBlink") as? Bool) ?? true
         let accentHex = Theme.accent(named: defaults.string(forKey: "glint.accentName")).rgbHex
         let scrollbackLimitBytes: Int = {
@@ -224,10 +232,13 @@ final class GhosttyManager {
         // `font-family` 已经满足前提;家族没有 Bold 切片时 ghostty 自动回落,不
         // 会偷偷换字体。
         let boldStyle = bold ? "\nfont-style = Bold" : ""
+        // ghostty 把多行 `font-family` 当 fallback 链(声明序为优先级)。
+        // 顺序:主字体 → 用户指定的 CJK 兜底(可空) → Menlo 终极兜底。
+        let cjkLine = cjkFamily.isEmpty ? "" : "\nfont-family = \(cjkFamily)"
         let overrides = """
         \(colorBlock)cursor-style = \(cursorStyle)
         cursor-style-blink = \(cursorBlink)
-        font-family = \(family)
+        font-family = \(family)\(cjkLine)
         font-family = Menlo
         font-size = \(size)\(boldStyle)
         scrollback-limit = \(scrollbackLimitBytes)
@@ -409,4 +420,15 @@ final class GhosttyManager {
         // We don't act here; the AppKit owner can poll surface state.
         _ = ud
     }
+}
+
+/// Strip 控制字符 + trim 后返回非空字符串;nil = 「视为未设置」。
+/// 给 ghostty config(key=value 逐行)注入任何 UserDefaults 来源的 value 用 ——
+/// 把嵌入换行/回车堵掉,避免被注成新的 `font-family =` / `font-size =` 行。
+/// 字体家族、CJK 兜底等自由形态字段都要走这层。
+private func sanitizeConfigValue(_ raw: String?) -> String? {
+    guard let raw else { return nil }
+    let cleaned = raw.unicodeScalars
+        .filter { !CharacterSet.controlCharacters.contains($0) }
+    return String(String.UnicodeScalarView(cleaned)).nilIfBlank
 }

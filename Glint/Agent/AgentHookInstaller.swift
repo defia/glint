@@ -117,6 +117,28 @@ enum AgentHookInstaller {
             || AgentPresence.commandExists("claude")
     }
 
+    /// Installers whose hooks reference the shared `~/.glint/hooks/glint-report.sh`
+    /// reporter. The single source of truth consulted by
+    /// `removeReporterScriptIfUnused` — adding a new agent that adopts the
+    /// shared reporter is a one-line change here, not an edit to every
+    /// uninstall path.
+    private static let reporterSharingInstallers: [() -> Bool] = [
+        { AgentHookInstaller.isInstalled() },
+        { CodexHookInstaller.isInstalled() },
+        { DevinHookInstaller.isInstalled() },
+    ]
+
+    /// Delete the shared reporter script iff no installed agent still
+    /// references it. Callers that run under an injected (test) config path
+    /// must gate the call themselves so unit tests never delete the real
+    /// `~/.glint` reporter (see DevinHookInstaller.uninstall).
+    static func removeReporterScriptIfUnused() {
+        guard !reporterSharingInstallers.contains(where: { $0() }) else { return }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let script = home.appendingPathComponent(".glint/hooks/glint-report.sh")
+        try? FileManager.default.removeItem(at: script)
+    }
+
     /// Strip Glint's hook entries from `~/.claude/settings.json` and delete
     /// the reporter script. Other tools' hook entries are preserved; empty
     /// buckets are removed; an empty `hooks` map is removed entirely.
@@ -162,11 +184,7 @@ enum AgentHookInstaller {
         }
         // Only nuke the shared reporter if no other installed agent still
         // references it (Codex and Devin share the same script).
-        if !AgentHookInstaller.isInstalled() && !CodexHookInstaller.isInstalled()
-            && !DevinHookInstaller.isInstalled() {
-            let script = home.appendingPathComponent(".glint/hooks/glint-report.sh")
-            try? FileManager.default.removeItem(at: script)
-        }
+        removeReporterScriptIfUnused()
     }
 
     static func installIfNeeded(socketPath: String) {
@@ -355,12 +373,22 @@ enum AgentHookInstaller {
     fi
 
     umask 077
-    TMP=$(/usr/bin/mktemp "${TMPDIR:-/tmp}/glint-hook.XXXXXX") || { cat >/dev/null 2>&1; exit 0; }
-    trap '/bin/rm -f "$TMP"' EXIT HUP INT TERM
-    cat >"$TMP"
-    SESSION=$(/usr/bin/plutil -extract session_id raw -o - "$TMP" 2>/dev/null || true)
-    /bin/rm -f "$TMP"
-    trap - EXIT HUP INT TERM
+    # The temp file is only needed to extract the OPTIONAL session_id (plutil
+    # reads a file). If mktemp fails (rare: TMPDIR gone / full), drain stdin
+    # but STILL deliver the event without a session id — the event drives pane
+    # state (idle/thinking/stop/permission), while the id only optimizes #45
+    # resume. Dropping the whole event (the old `exit 0`) stalled the pane
+    # silently until mktemp recovered.
+    SESSION=""
+    if TMP=$(/usr/bin/mktemp "${TMPDIR:-/tmp}/glint-hook.XXXXXX"); then
+      trap '/bin/rm -f "$TMP"' EXIT HUP INT TERM
+      cat >"$TMP"
+      SESSION=$(/usr/bin/plutil -extract session_id raw -o - "$TMP" 2>/dev/null || true)
+      /bin/rm -f "$TMP"
+      trap - EXIT HUP INT TERM
+    else
+      cat >/dev/null 2>&1
+    fi
 
     if [ -n "$SESSION" ]; then
       SESSION_B64=$(printf '%s' "$SESSION" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
@@ -408,7 +436,7 @@ enum CodexHookInstaller {
     ]
 
     static func isInstalled() -> Bool {
-        configuredHomes().contains { isInstalled(in: $0.resolvedURL) }
+        CodexHomeStore.configuredHomes().contains { isInstalled(in: $0.resolvedURL) }
     }
 
     static func isInstalled(in codexHome: URL) -> Bool {
@@ -449,7 +477,7 @@ enum CodexHookInstaller {
 
     static func installIfNeeded(socketPath: String) {
         guard let scriptPath = AgentHookInstaller.ensureReporterScript() else { return }
-        for home in configuredHomes().filter(\.isEnabled) {
+        for home in CodexHomeStore.configuredHomes().filter(\.isEnabled) {
             do {
                 try mergeCodexHooks(scriptPath: scriptPath, codexHome: home.resolvedURL)
             } catch {
@@ -470,10 +498,10 @@ enum CodexHookInstaller {
     /// itself is shared with Claude, so we only delete it when neither agent
     /// still references it.
     static func uninstall() {
-        for home in configuredHomes() {
+        for home in CodexHomeStore.configuredHomes() {
             try? uninstall(from: home.resolvedURL)
         }
-        removeReporterIfUnused()
+        AgentHookInstaller.removeReporterScriptIfUnused()
     }
 
     static func uninstall(from codexHome: URL) throws {
@@ -524,15 +552,6 @@ enum CodexHookInstaller {
                 setPosixPermissions(mode, atPath: url.path)
             }
             NSLog("[glint] codex hooks removed from \(url.path)")
-        }
-    }
-
-    private static func removeReporterIfUnused() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        if !AgentHookInstaller.isInstalled() && !CodexHookInstaller.isInstalled()
-            && !DevinHookInstaller.isInstalled() {
-            let script = home.appendingPathComponent(".glint/hooks/glint-report.sh")
-            try? FileManager.default.removeItem(at: script)
         }
     }
 
@@ -607,14 +626,6 @@ enum CodexHookInstaller {
         } catch {
             throw CodexHookInstallerError.writeFailed(error.localizedDescription)
         }
-    }
-
-    private static func configuredHomes(defaults: UserDefaults = .standard) -> [CodexHome] {
-        guard let data = defaults.data(forKey: CodexHomeStore.storageKey),
-              let homes = try? JSONDecoder().decode([CodexHome].self, from: data),
-              !homes.isEmpty else { return [.default] }
-        var seen = Set<URL>()
-        return homes.filter { seen.insert($0.resolvedURL).inserted }
     }
 
     private static func equalsJSON(_ a: Any?, _ b: Any) -> Bool {
@@ -1175,13 +1186,8 @@ enum DevinHookInstaller {
         // Only nuke the shared reporter if no other agent still references it.
         // Skipped for an injected (test) config path so unit tests never touch
         // the real ~/.glint reporter script.
-        if url == DevinHookInstaller.defaultConfigURL(),
-           !AgentHookInstaller.isInstalled()
-            && !CodexHookInstaller.isInstalled()
-            && !DevinHookInstaller.isInstalled() {
-            let home = FileManager.default.homeDirectoryForCurrentUser
-            let script = home.appendingPathComponent(".glint/hooks/glint-report.sh")
-            try? FileManager.default.removeItem(at: script)
+        if url == DevinHookInstaller.defaultConfigURL() {
+            AgentHookInstaller.removeReporterScriptIfUnused()
         }
     }
 

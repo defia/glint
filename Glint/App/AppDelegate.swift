@@ -1,4 +1,6 @@
 import AppKit
+import CoreText
+import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -12,6 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        // 通知点击由我们自己接:激活现有窗口 + 切到对应 pane,
+        // 否则系统默认会再 launch 一个窗口。
+        UNUserNotificationCenter.current().delegate = self
         DispatchQueue.main.async {
             self.configureMainWindow()
             self.patchMainMenu()
@@ -24,6 +29,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // stays armed (see SettingsSafety).
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             SettingsSafety.shared.markHealthy()
+        }
+        // 后台预热字体 cache:Settings ▸ Terminal 第一次打开会同步枚举所有
+        // 已安装家族(可能 300+,每个再 availableMembers)。装得多的机器上
+        // 主线程同步跑会卡住一帧;这里挪到 userInitiated queue 后台做掉,
+        // 等用户走到 Settings 时 cache 已 ready。
+        DispatchQueue.global(qos: .userInitiated).async {
+            FontCatalog.warmCache()
+        }
+        // 用户中途装/删字体时让 cache 失效,下次访问按需重建。这是 Cocoa
+        // 桥过来的 CFString 常量,用 raw value 包成 Notification.Name。
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name(kCTFontManagerRegisteredFontsChangedNotification as String),
+            object: nil, queue: nil
+        ) { _ in
+            FontCatalog.invalidateCache()
+            DispatchQueue.global(qos: .utility).async {
+                FontCatalog.warmCache()
+            }
         }
     }
 
@@ -82,6 +105,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // high-water mark — a setting changed this session can still crash the
         // next launch (issue #15), so it must stay rollback-eligible.
         SettingsSafety.shared.markCleanExit()
+        // Drop our delivered banners so they don't outlive the process. A
+        // notification whose owner is gone is a dead link: clicking it
+        // cold-launches a fresh instance instead of activating the running one.
+        // These banners are transient attention cues, not anything to keep.
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
     }
 
     private func configureMainWindow() {
@@ -209,5 +237,28 @@ private final class CloseGuardWindowDelegate: NSObject, NSWindowDelegate {
             return original.windowShouldClose?(sender) ?? true
         }
         return true
+    }
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    /// 点击通知:激活 app 并把主窗前置;若通知带了 workspace+pane,再切过去。
+    /// 设了 delegate 后系统不再走默认的「再开一个窗口」行为。
+    /// `nonisolated` + 切主 actor:协议回调不保证在 main actor,而 AppDelegate 是
+    /// @MainActor,直接 conformance 会跨隔离(Swift 6 会变错)。
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                            didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
+        Task { @MainActor in
+            let info = response.notification.request.content.userInfo
+            NSApp.activate(ignoringOtherApps: true)
+            mainWindow?.makeKeyAndOrderFront(nil)
+            if let wsStr = info["workspace"] as? String,
+               let ws = UUID(uuidString: wsStr),
+               let paneStr = info["pane"] as? String,
+               let paneSeq = UInt32(paneStr) {
+                WorkspaceStore.current?.revealPane(workspace: ws, pane: PaneID(value: paneSeq))
+            }
+            completionHandler()
+        }
     }
 }

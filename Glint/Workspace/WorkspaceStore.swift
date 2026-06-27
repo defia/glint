@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import AppKit
 import Darwin
+import UserNotifications
 
 // MARK: - Domain types
 
@@ -137,9 +138,15 @@ struct Pane: Identifiable, Codable {
     /// agent stops matching the entry's key, so a stale id can't leak
     /// across an exit/relaunch.
     var sessionIds: [String: String]
+    /// Resolved `CODEX_HOME` path a non-default-home Codex pane was launched
+    /// under, so restart can re-prefix `codex resume …` with it (#45 for the
+    /// multi-home feature). nil for default-home / non-codex panes. Cleared in
+    /// `captureCwdsFromLiveSurfaces` once the foreground stops being Codex, so
+    /// a later default-Codex launch on the same pane can't inherit a stale home.
+    var codexHome: String?
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, workingDirectory, lastAgent, sessionIds
+        case id, title, workingDirectory, lastAgent, sessionIds, codexHome
     }
 
     /// Field shape from the first cut of #45 (one Optional per agent). Read
@@ -158,6 +165,7 @@ struct Pane: Identifiable, Codable {
         self.workingDirectory = workingDirectory
         self.lastAgent = lastAgent
         self.sessionIds = [:]
+        self.codexHome = nil
     }
 
     init(from decoder: Decoder) throws {
@@ -166,6 +174,7 @@ struct Pane: Identifiable, Codable {
         self.title = try c.decode(String.self, forKey: .title)
         self.workingDirectory = try c.decodeIfPresent(String.self, forKey: .workingDirectory)
         self.lastAgent = try c.decodeIfPresent(String.self, forKey: .lastAgent)
+        self.codexHome = try c.decodeIfPresent(String.self, forKey: .codexHome)
         if let map = try c.decodeIfPresent([String: String].self, forKey: .sessionIds) {
             self.sessionIds = map
         } else {
@@ -193,6 +202,7 @@ struct Pane: Identifiable, Codable {
         try c.encode(title, forKey: .title)
         try c.encodeIfPresent(workingDirectory, forKey: .workingDirectory)
         try c.encodeIfPresent(lastAgent, forKey: .lastAgent)
+        try c.encodeIfPresent(codexHome, forKey: .codexHome)
         // Skip the key entirely when there's nothing to remember — most
         // panes never see an agent, and an empty `{}` on every pane would
         // be persistent noise in the autosave file.
@@ -522,6 +532,12 @@ final class WorkspaceStore: ObservableObject {
     /// of-the-OS.
     @Published var settingsOpen: Bool = false
 
+    /// True while a workspace (sidebar) or tab (tab bar) rename field is the
+    /// focused first responder. Gates the click-away dismissal monitor in
+    /// `ContentView` so it resigns *only* during an actual rename — the sidebar
+    /// search and other text fields stay on macOS's default focus behavior.
+    @Published var isRenaming: Bool = false
+
     /// Hand-authored "What's New" notes to show in the centered card overlay.
     /// Non-empty ⇒ the card is up (one entry on manual open, possibly several
     /// when catching up across skipped versions). See `ReleaseNotes.swift`.
@@ -597,9 +613,23 @@ final class WorkspaceStore: ObservableObject {
     /// Terminal appearance settings. Each is persisted to UserDefaults and
     /// fed into ghostty via `GhosttyManager.reloadConfig()` whenever it
     /// changes. The `didSet` hooks both persist and trigger live reload.
-    @Published var terminalFontFamily: String = UserDefaults.standard.string(forKey: "glint.terminalFontFamily") ?? "SF Mono" {
+    ///
+    /// 读写都规范化为「去首尾空白」的形式 —— 下游 FontCatalog 的 Current 行用
+    /// trimmed 值匹配,如果绑定值不 trim,选中态会对不上(老 UserDefaults 里
+    /// 留下 " SF Mono " 会让下拉同时出 Recommended 与 Current 两条)。CJK 路径
+    /// 已经这么做,这里保持对称。
+    @Published var terminalFontFamily: String = {
+        let raw = (UserDefaults.standard.string(forKey: "glint.terminalFontFamily") ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? "SF Mono" : raw
+    }() {
         didSet {
-            UserDefaults.standard.set(terminalFontFamily, forKey: "glint.terminalFontFamily")
+            let canonical = terminalFontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
+            if canonical != terminalFontFamily {
+                terminalFontFamily = canonical
+                return
+            }
+            UserDefaults.standard.set(canonical, forKey: "glint.terminalFontFamily")
             GhosttyManager.shared.reloadConfig()
         }
     }
@@ -618,6 +648,26 @@ final class WorkspaceStore: ObservableObject {
     @Published var terminalFontBold: Bool = (UserDefaults.standard.object(forKey: "glint.terminalFontBold") as? Bool) ?? false {
         didSet {
             UserDefaults.standard.set(terminalFontBold, forKey: "glint.terminalFontBold")
+            GhosttyManager.shared.reloadConfig()
+        }
+    }
+    /// CJK fallback 字体家族。空 = 不注入，CJK 字形交给系统/ghostty 默认 fallback
+    /// 链(macOS 上通常就是苹方)。非空 = 在主字体与 Menlo 之间插一行
+    /// `font-family = <family>`,主字体缺 CJK 字形时优先回落到这里。
+    ///
+    /// 读写都规范化为「去首尾空白」的形式 —— 下游 FontCatalog 的 Current 行
+    /// 用 trimmed 值匹配,如果绑定值不 trim,选中态会对不上。
+    @Published var terminalCJKFontFamily: String = (UserDefaults.standard.string(forKey: "glint.terminalCJKFontFamily") ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    {
+        didSet {
+            let canonical = terminalCJKFontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
+            if canonical != terminalCJKFontFamily {
+                // 反向写回:避免 didSet 递归调用,只在确实需要时改 @Published 值。
+                terminalCJKFontFamily = canonical
+                return
+            }
+            UserDefaults.standard.set(canonical, forKey: "glint.terminalCJKFontFamily")
             GhosttyManager.shared.reloadConfig()
         }
     }
@@ -810,10 +860,16 @@ final class WorkspaceStore: ObservableObject {
     /// presets are pre-rendered with their own padding and corner.
     /// Must run on the main thread; `didSet` and the launch restore both do.
     func applyAppIcon() {
+        // `NSApp` is `NSApplication!` (IUO). Touching it during @StateObject
+        // boxing at launch traps (#43), so guard like the dock-tile paths.
+        // Today's callers (the `appIconPreset` didSet and AppDelegate's
+        // main.async-deferred launch restore) land after NSApp is set, but a
+        // future init-time caller would otherwise hit the same trap.
+        guard let app = NSApp else { return }
         if let asset = appIconPreset.assetName {
-            NSApp.applicationIconImage = NSImage(named: asset)
+            app.applicationIconImage = NSImage(named: asset)
         } else {
-            NSApp.applicationIconImage = nil
+            app.applicationIconImage = nil
         }
     }
 
@@ -920,6 +976,21 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(soundOnError, forKey: "glint.soundOnError") }
     }
 
+    /// 在后台 agent 需要关注时(权限请求 / 完成 / 出错),除了 chime 之外再弹一个
+    /// 静默的 macOS 通知横幅。一个总开关覆盖三种状态。默认 off:横幅比 chime 更
+    /// 打扰、且需要系统授权,让用户主动开启。
+    @Published var systemNotificationOnAgentAttention: Bool =
+        (UserDefaults.standard.object(forKey: "glint.systemNotificationOnAgentAttention") as? Bool) ?? false {
+        didSet {
+            UserDefaults.standard.set(systemNotificationOnAgentAttention,
+                                      forKey: "glint.systemNotificationOnAgentAttention")
+            if systemNotificationOnAgentAttention {
+                // 用户首次开启时请求授权;系统级已拒绝则为空操作。
+                Task { try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) }
+            }
+        }
+    }
+
     /// Show a Dock badge count for background agent states that need a look.
     /// Unlike notification banners this stays quiet and carries no prompt or
     /// transcript text. Defaults to on because it is non-interruptive.
@@ -929,6 +1000,23 @@ final class WorkspaceStore: ObservableObject {
             if !dockBadgeOnAgentAttention { dockBadgePaneStatuses.removeAll() }
             updateDockBadge()
         }
+    }
+
+    /// For a plain (non-git-bound) workspace whose focused pane sits inside a
+    /// git repo, review the whole repository from its root (on, default) or just
+    /// the focused pane's current-directory subtree (off). Git-bound workspaces
+    /// always review at the repo root — their gitPath is already root — so this
+    /// only selects the scope for plain workspaces. See `openReview`.
+    @Published var reviewAtRepoRoot: Bool = (UserDefaults.standard.object(forKey: "glint.reviewAtRepoRoot") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(reviewAtRepoRoot, forKey: "glint.reviewAtRepoRoot") }
+    }
+
+    /// Same choice, independent, for Reveal in Finder (⌘⇧F): reveal the repo
+    /// root (on, default) or the focused pane's cwd (off) for plain workspaces.
+    /// Git-bound workspaces always reveal their bound root. See
+    /// `revealCurrentInFinder`.
+    @Published var revealAtRepoRoot: Bool = (UserDefaults.standard.object(forKey: "glint.revealAtRepoRoot") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(revealAtRepoRoot, forKey: "glint.revealAtRepoRoot") }
     }
 
     /// NSSound names for the three audio cues, persisted; the defaults are
@@ -1366,7 +1454,7 @@ final class WorkspaceStore: ObservableObject {
                   restoreEnabled(for: kind) else { return nil }
             let sid = pane.sessionIds[kind.rawValue]
                 .flatMap { Self.isValidSessionId($0) ? $0 : nil }
-            return kind.restoreCommand(sessionId: sid)
+            return kind.restoreCommand(sessionId: sid, codexHome: pane.codexHome)
         }()
         let v = GhosttySurfaceView(
             frame: .zero,
@@ -1456,6 +1544,21 @@ final class WorkspaceStore: ObservableObject {
                         if kept.count != existing.count {
                             workspaces[i].panes[paneID]?.sessionIds = kept
                         }
+                    }
+                    // codexHome is only meaningful while Codex is the
+                    // foreground. Clear it ONLY when the pane is back at a
+                    // benign shell — i.e. the user actually exited Codex — not
+                    // when a Codex tool subprocess (git/npm/vim/…) briefly takes
+                    // the foreground pid. Unlike sessionIds (re-stashed by every
+                    // UserPromptSubmit hook above), codexHome has no writer but
+                    // launch, so a premature clear permanently breaks the
+                    // non-default-home resume (#45 multi-home regression) until
+                    // the pane is relaunched. A stale home can't leak anyway:
+                    // the next launch always rewrites codexHome via
+                    // queueInitialInput.
+                    if workspaces[i].panes[paneID]?.codexHome != nil,
+                       Self.isBenignShellProcessName(name) {
+                        workspaces[i].panes[paneID]?.codexHome = nil
                     }
                 }
             }
@@ -1632,6 +1735,11 @@ final class WorkspaceStore: ObservableObject {
                 break
             }
         }
+        // 通知比 chime 门更严:仅在整个 Glint 处于后台时弹(前台切到别的 workspace
+        // 不弹——横幅不该盖在用户正用的 app 上)。chime 走上面的 `!userIsWatching` 宽门。
+        if systemNotificationOnAgentAttention && !NSApp.isActive && oldStatus != state.status {
+            postAttentionNotification(status: state.status, key: key)
+        }
         syncDockBadge(for: key, oldStatus: oldStatus, newStatus: state.status, userIsWatching: userIsWatching)
     }
 
@@ -1706,6 +1814,34 @@ final class WorkspaceStore: ObservableObject {
         case .idle, .thinking, .tool, .compacting:
             return false
         }
+    }
+
+    /// 与 chime 镜像的静默横幅。title 用 workspace 名(数据、不翻译),body 走本地化。
+    /// userInfo 带定位(workspace + pane),点击通知时据此呼出 app 并切到该 pane。
+    private func postAttentionNotification(status: PaneAgentStatus, key: WorkspacePaneKey) {
+        let body: String
+        switch status {
+        case .needsPermission: body = String(localized: "Waiting for your approval")
+        case .justCompleted:   body = String(localized: "Agent finished its turn")
+        case .failed:          body = String(localized: "Agent's turn ended in an error")
+        default: return
+        }
+        let title = workspaces.first { $0.id == key.workspace }?.displayName
+            ?? String(localized: "Glint")
+        let c = UNMutableNotificationContent()
+        c.title = title
+        c.body = body
+        // 不设 soundName — chime 已覆盖声音,横幅只负责视觉。
+        c.userInfo = [
+            "workspace": key.workspace.uuidString,
+            "pane": String(key.pane.value),
+        ]
+        // Stable id per pane: a fresh banner replaces the stale one instead of
+        // stacking up in Notification Center, where — once the process exits —
+        // they become dead links that cold-launch a new instance on click.
+        let id = "glint.attention.\(key.workspace.uuidString).\(key.pane.value)"
+        let req = UNNotificationRequest(identifier: id, content: c, trigger: nil)
+        UNUserNotificationCenter.current().add(req)
     }
 
     private func syncDockBadge(for key: WorkspacePaneKey,
@@ -1830,10 +1966,19 @@ final class WorkspaceStore: ObservableObject {
     /// (`pendingInitialInput` → `GhosttySurfaceView.initialInput`); a nil/empty
     /// command leaves the pane a bare shell. Call right after creating the pane,
     /// before its surface is built, so the lookup finds the entry.
-    private func queueInitialInput(_ command: String?, workspace: UUID, pane: PaneID) {
+    private func queueInitialInput(_ command: String?, codexHome: String? = nil,
+                                   workspace: UUID, pane: PaneID) {
         guard let cmd = command, !cmd.isEmpty else { return }
         let key = WorkspacePaneKey(workspace: workspace, pane: pane)
         pendingInitialInput[key] = cmd.hasSuffix("\n") ? cmd : cmd + "\n"
+        // Persist a non-default Codex home on the pane so a restart can
+        // re-prefix `codex resume …` with the same CODEX_HOME (see
+        // `Pane.codexHome`). The pane was just created above us, so the
+        // subscript hits.
+        if let home = codexHome,
+           let wi = workspaces.firstIndex(where: { $0.id == workspace }) {
+            workspaces[wi].panes[pane]?.codexHome = home
+        }
     }
 
     // MARK: new-terminal entry points (honor the "ask which agent" setting)
@@ -1863,15 +2008,16 @@ final class WorkspaceStore: ObservableObject {
         agentChooserIntent = nil
         guard let item else { return }
         let cmd = item.command
+        let home = item.codexHome
         switch intent {
-        case .tab:        newTab(agentCommand: cmd)
-        case .splitRight: splitFocused(.horizontal, agentCommand: cmd)
-        case .splitDown:  splitFocused(.vertical, agentCommand: cmd)
-        case .workspace:  addWorkspace(agentCommand: cmd)
+        case .tab:        newTab(agentCommand: cmd, codexHome: home)
+        case .splitRight: splitFocused(.horizontal, agentCommand: cmd, codexHome: home)
+        case .splitDown:  splitFocused(.vertical, agentCommand: cmd, codexHome: home)
+        case .workspace:  addWorkspace(agentCommand: cmd, codexHome: home)
         }
     }
 
-    func splitFocused(_ direction: SplitDirection, agentCommand: String? = nil) {
+    func splitFocused(_ direction: SplitDirection, agentCommand: String? = nil, codexHome: String? = nil) {
         guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
         let new = PaneID(value: workspaces[i].nextPaneSeq)
         workspaces[i].nextPaneSeq += 1
@@ -1883,7 +2029,7 @@ final class WorkspaceStore: ObservableObject {
             newID: new
         ) ?? workspaces[i].tabs[t].root
         workspaces[i].tabs[t].focusedPane = new
-        queueInitialInput(agentCommand, workspace: workspaces[i].id, pane: new)
+        queueInitialInput(agentCommand, codexHome: codexHome, workspace: workspaces[i].id, pane: new)
     }
 
     /// Shells whose presence as the foreground process means "nothing of
@@ -2038,6 +2184,21 @@ final class WorkspaceStore: ObservableObject {
         refreshGitStatusNow(for: workspaces[i].id)
     }
 
+    /// 点击系统通知时呼出:切到 workspace、选中含该 pane 的 tab 并聚焦,
+    /// 同时清掉它的未读(justCompleted/failed)状态与 Dock 角标。
+    func revealPane(workspace: UUID, pane: PaneID) {
+        guard let wi = workspaces.firstIndex(where: { $0.id == workspace }) else { return }
+        selectedWorkspaceID = workspace
+        if let ti = workspaces[wi].tabs.firstIndex(where: { $0.root.leaves.contains(pane) }) {
+            workspaces[wi].selectedTabID = workspaces[wi].tabs[ti].id
+            workspaces[wi].tabs[ti].focusedPane = pane
+        }
+        let key = WorkspacePaneKey(workspace: workspace, pane: pane)
+        clearDockBadge(for: key)
+        acknowledgeCompletionIfNeeded(for: workspace)
+        refreshGitStatusNow(for: workspace)
+    }
+
     // MARK: - external control (control.sock)
     //
     // Command dispatch for ControlBridge. Each method runs on the main thread
@@ -2148,7 +2309,7 @@ final class WorkspaceStore: ObservableObject {
     /// Open a new tab in the current workspace, inheriting the focused pane's
     /// cwd (terminal convention: a new tab opens "here"). Inserts it right
     /// after the current tab and selects it.
-    func newTab(agentCommand: String? = nil) {
+    func newTab(agentCommand: String? = nil, codexHome: String? = nil) {
         guard let i = currentIndex else { return }
         let inheritedCwd = (workspaces[i].selectedTab?.focusedPane)
             .flatMap { workspaces[i].panes[$0]?.workingDirectory }
@@ -2164,7 +2325,7 @@ final class WorkspaceStore: ObservableObject {
             workspaces[i].tabs.append(tab)
         }
         workspaces[i].selectedTabID = tab.id
-        queueInitialInput(agentCommand, workspace: workspaces[i].id, pane: pane)
+        queueInitialInput(agentCommand, codexHome: codexHome, workspace: workspaces[i].id, pane: pane)
     }
 
     /// Close a tab and every pane it holds, cleaning up each pane's surface,
@@ -2402,7 +2563,7 @@ final class WorkspaceStore: ObservableObject {
         workspaces.move(fromOffsets: IndexSet(integer: source), toOffset: offset)
     }
 
-    func addWorkspace(agentCommand: String? = nil) {
+    func addWorkspace(agentCommand: String? = nil, codexHome: String? = nil) {
         let palette = [
             ("5E5CE6", "•"), ("FF6582", "•"), ("30D158", "•"),
             ("FF9F0A", "•"), ("64D2FF", "•"), ("BF5AF2", "•"),
@@ -2413,7 +2574,7 @@ final class WorkspaceStore: ObservableObject {
         workspaces.append(ws)
         selectedWorkspaceID = ws.id
         // Workspace.fresh seeds a single pane at PaneID 0.
-        queueInitialInput(agentCommand, workspace: ws.id, pane: PaneID(value: 0))
+        queueInitialInput(agentCommand, codexHome: codexHome, workspace: ws.id, pane: PaneID(value: 0))
     }
 
     /// Open a workspace anchored at `directory` (the "Local Repo" source). The
@@ -2456,7 +2617,7 @@ final class WorkspaceStore: ObservableObject {
     func createWorktreeWorkspace(repoRoot: String, baseBranch: String, branch: String,
                                  worktreePath: String, createBranch: Bool = true,
                                  carryUncommitted: Bool = false,
-                                 agentCommand: String?) async throws -> UUID {
+                                 agentCommand: String?, codexHome: String? = nil) async throws -> UUID {
         let expanded = (worktreePath as NSString).expandingTildeInPath
         try await git.addWorktree(repo: repoRoot, path: expanded,
                                   newBranch: createBranch ? branch : nil,
@@ -2473,7 +2634,8 @@ final class WorkspaceStore: ObservableObject {
         }
 
         let first = PaneID(value: 0)
-        let pane = Pane(id: first, title: "zsh", workingDirectory: expanded)
+        var pane = Pane(id: first, title: "zsh", workingDirectory: expanded)
+        pane.codexHome = codexHome
         let tab = WorkspaceTab(id: TabID(value: 0), name: nil, root: .leaf(first), focusedPane: first)
         let ws = Workspace(
             id: UUID(), name: "New workspace", userNamed: false,
@@ -2522,12 +2684,17 @@ final class WorkspaceStore: ObservableObject {
         if let branchError { throw branchError }
     }
 
+    /// Open the workspace's location in Finder — shared by every "Open in
+    /// Finder" entry point (git popover button, sidebar context item, command
+    /// palette). Mirrors the ⌘⇧F shortcut: the bound root (worktree/repo) when
+    /// `revealAtRepoRoot` is on, else the focused pane's cwd — and always dives
+    /// INTO the folder, so the button and the shortcut stay consistent.
     func revealWorktreeInFinder(_ id: UUID) {
         guard let ws = workspaces.first(where: { $0.id == id }),
-              let path = ws.source.worktreePath ?? ws.source.repoRoot ?? effectiveGitPath(for: ws)
+              let root = ws.source.worktreePath ?? ws.source.repoRoot ?? effectiveGitPath(for: ws)
         else { return }
-        NSWorkspace.shared.activateFileViewerSelecting(
-            [URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])
+        let paneCwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
+        Self.openInFinder((revealAtRepoRoot || paneCwd == nil) ? root : paneCwd!)
     }
 
     /// Reveal the focused pane's current directory in Finder — the global ⌘⇧F
@@ -2540,24 +2707,36 @@ final class WorkspaceStore: ObservableObject {
             NSSound.beep()
             return
         }
-        let cwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
-        guard let path = cwd
-            ?? ws.source.worktreePath
-            ?? ws.source.repoRoot
-            ?? effectiveGitPath(for: ws)
-        else {
+        let paneCwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
+        // A bound workspace's gitPath is its root (worktree root for a worktree,
+        // repo root for Local Repo) — already known. A plain workspace resolves
+        // the toplevel async. Either way, dive INTO revealAtRepoRoot's target:
+        // the root (on, default) or the focused pane's current directory (off).
+        if let root = ws.source.gitPath {
+            let target = (revealAtRepoRoot || paneCwd == nil) ? root : paneCwd!
+            Self.openInFinder(target)
+            return
+        }
+        let base = paneCwd ?? ws.source.worktreePath ?? ws.source.repoRoot ?? effectiveGitPath(for: ws)
+        guard let base else {
             NSSound.beep()
             return
         }
-        NSWorkspace.shared.activateFileViewerSelecting(
-            [URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])
+        if revealAtRepoRoot {
+            Task {
+                let root = await git.repoRoot(at: base) ?? base
+                await MainActor.run { Self.openInFinder(root) }
+            }
+        } else {
+            Self.openInFinder(base)
+        }
     }
 
     /// Open the read-only Review window for a workspace. Always offers the
     /// working-tree scope; for a worktree with a known base branch it also offers
     /// the whole-branch (`base...HEAD`) scope, so the segmented control appears.
     func openReview(for ws: Workspace) {
-        guard let repo = ws.source.gitPath ?? effectiveGitPath(for: ws) else {
+        guard let cwd = ws.source.gitPath ?? effectiveGitPath(for: ws) else {
             NSSound.beep()
             return
         }
@@ -2565,7 +2744,36 @@ final class WorkspaceStore: ObservableObject {
         if let base = ws.source.baseBranch, !base.isEmpty {
             scopes.append(.branch(base: base))
         }
-        ReviewWindowController.shared.present(repo: repo, title: ws.displayName, scopes: scopes)
+        // A bound workspace's gitPath is its root (worktree/repo) — known, no
+        // async. A plain workspace resolves the toplevel async. Either way
+        // honor reviewAtRepoRoot: whole root (on, default) or the focused pane's
+        // cwd subtree (off, filtered via `subdir`). `repo` is always the root so
+        // fileDiff's root-relative paths resolve — the empty-diff bug stays
+        // fixed by construction.
+        let scopeToRoot = reviewAtRepoRoot
+        if let root = ws.source.gitPath {
+            let subdir = scopeToRoot ? nil : Self.paneSubdir(for: ws, root: root)
+            // Keep the worktree's "repo · branch" identity and append the
+            // reviewed subdir when scoping to it (root mode shows just the
+            // identity), so the title reflects what's actually reviewed.
+            let title = subdir.map { "\(ws.displayName) · \($0)" } ?? ws.displayName
+            ReviewWindowController.shared.present(repo: root, title: title,
+                                                  subdir: subdir, scopes: scopes, store: self)
+            return
+        }
+        Task {
+            let root = await git.repoRoot(at: cwd) ?? cwd
+            let subdir = scopeToRoot ? nil : Self.paneSubdir(for: ws, root: root)
+            // Title reflects what's reviewed, not ws.displayName — which for a
+            // plain workspace can be a cwd-derived label that disagrees with the
+            // root Review actually opens.
+            let rootName = (root as NSString).lastPathComponent
+            let reviewTitle = subdir.map { "\(rootName)/\($0)" } ?? rootName
+            await MainActor.run {
+                ReviewWindowController.shared.present(repo: root, title: reviewTitle,
+                                                      subdir: subdir, scopes: scopes, store: self)
+            }
+        }
     }
 
     // MARK: - What's New (hand-authored per-version notes; see ReleaseNotes.swift)
@@ -2647,6 +2855,36 @@ final class WorkspaceStore: ObservableObject {
         if let p = ws.source.gitPath { return p }
         return (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
             ?? ws.panes.values.compactMap(\.workingDirectory).first
+    }
+
+    /// Root-relative path of `cwd` under `root`, or nil if `cwd` is the root
+    /// itself or not inside it. Both are normalized (symlinks resolved,
+    /// "."/".." collapsed) before the prefix drop, so a symlinked repo root or
+    /// a "."-laden shell cwd compare correctly. Used to scope Review's file
+    /// list to a subdirectory: e.g. root=/repo, cwd=/repo/src → "src".
+    /// Pure / no instance state, so Review can call it once at open time and
+    /// pass the result down as `subdir`.
+    nonisolated static func subdirPath(root: String, cwd: String) -> String? {
+        let r = URL(fileURLWithPath: root).resolvingSymlinksInPath().standardizedFileURL.path
+        let c = URL(fileURLWithPath: cwd).resolvingSymlinksInPath().standardizedFileURL.path
+        if c == r { return nil }
+        guard c.hasPrefix(r + "/") else { return nil }   // cwd not under root
+        let rel = String(c.dropFirst(r.count + 1))
+        return rel.isEmpty ? nil : rel
+    }
+
+    /// The focused pane's cwd as a root-relative subdir, or nil if the pane has
+    /// no cwd, is at the root, or is outside it. Shared by `openReview` (Review
+    /// subtree filter) for bound and plain workspaces alike.
+    nonisolated static func paneSubdir(for ws: Workspace, root: String) -> String? {
+        guard let paneCwd = (ws.selectedTab?.focusedPane).flatMap({ ws.panes[$0]?.workingDirectory }) else { return nil }
+        return subdirPath(root: root, cwd: paneCwd)
+    }
+
+    /// Open a folder in Finder by diving INTO it (not reveal-and-select in its
+    /// parent). Shared by every Reveal-in-Finder path.
+    static func openInFinder(_ path: String) {
+        NSWorkspace.shared.open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
     }
 
     func gitStatus(for id: UUID) -> GitStatus? { gitStatuses[id] }

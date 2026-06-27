@@ -59,20 +59,33 @@ extension GitService {
     }
 
     /// Unified-diff text for one file under `scope` (empty string on failure).
-    func fileDiff(repo: String, scope: DiffScope, file: GitFileChange) async -> String {
+    /// `ignoreWhitespace` adds `--ignore-all-space` (indentation/whitespace-only
+    /// changes collapse to context) — a load-time flag, not a render filter.
+    func fileDiff(repo: String, scope: DiffScope, file: GitFileChange,
+                  ignoreWhitespace: Bool = false) async -> String {
+        // Huge -U makes git emit the entire file as context (clamped to file
+        // length), so "Show All" renders the whole file and "Changes Only"
+        // just filters context at render time. One load serves both states.
+        var args = ["diff", "--unified=1000000"]
+        if ignoreWhitespace { args.append("--ignore-all-space") }
         switch scope {
         case .workingTree:
             if file.kind == .untracked {
                 // No HEAD side — diff against /dev/null so the whole file shows
                 // as an addition. `--no-index` exits 1 when files differ (normal).
-                let r = try? await git(["diff", "--no-index", "--", "/dev/null", file.path],
+                // Prepend `args` so the toolbar's Show All / Ignore Whitespace
+                // toggles apply uniformly — without this, untracked files were
+                // silently exempt from the menu state.
+                let r = try? await git(args + ["--no-index", "--", "/dev/null", file.path],
                                        cwd: repo, allowFailure: true)
                 return r?.stdout ?? ""
             }
-            let r = try? await git(["diff", "HEAD", "--", file.path], cwd: repo, allowFailure: true)
+            let r = try? await git(args + ["HEAD", "--", file.path],
+                                   cwd: repo, allowFailure: true)
             return r?.stdout ?? ""
         case .branch(let base):
-            let r = try? await git(["diff", "\(base)...HEAD", "--", file.path], cwd: repo, allowFailure: true)
+            let r = try? await git(args + ["\(base)...HEAD", "--", file.path],
+                                   cwd: repo, allowFailure: true)
             return r?.stdout ?? ""
         }
     }

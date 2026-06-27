@@ -1,6 +1,94 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Unified": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "统一"
+          }
+        }
+      }
+    },
+    "Split": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "并排"
+          }
+        }
+      }
+    },
+    "Previous change": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上一个改动"
+          }
+        }
+      }
+    },
+    "Show All": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示全部"
+          }
+        }
+      }
+    },
+    "Changes Only": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅显示改动"
+          }
+        }
+      }
+    },
+    "Next change": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下一个改动"
+          }
+        }
+      }
+    },
+    "Show Whitespace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示空白"
+          }
+        }
+      }
+    },
+    "Ignore Whitespace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "忽略空白"
+          }
+        }
+      }
+    },
     "What's New": {
       "extractionState": "manual",
       "localizations": {
@@ -1821,6 +1909,50 @@
         }
       }
     },
+    "Review Changes at repository root": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在仓库根目录审查变更"
+          }
+        }
+      }
+    },
+    "For plain workspaces whose pane is inside a git repo, review the whole repository instead of just the current directory's subtree.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对于面板位于 git 仓库内的普通工作区，审查整个仓库而非仅当前目录的子树。"
+          }
+        }
+      }
+    },
+    "Reveal in Finder at repository root": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中显示仓库根目录"
+          }
+        }
+      }
+    },
+    "For plain workspaces whose pane is inside a git repo, reveal the repository root instead of the current directory.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对于面板位于 git 仓库内的普通工作区，显示仓库根目录而非当前目录。"
+          }
+        }
+      }
+    },
     "Restore last workspace": {
       "extractionState": "stale",
       "localizations": {
@@ -2140,6 +2272,94 @@
           "stringUnit": {
             "state": "translated",
             "value": "滚动记录大小"
+          }
+        }
+      }
+    },
+    "CJK fallback": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中文字体兜底"
+          }
+        }
+      }
+    },
+    "Used when the main font is missing CJK glyphs.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主字体缺中日韩字形时使用。"
+          }
+        }
+      }
+    },
+    "Recommended": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推荐"
+          }
+        }
+      }
+    },
+    "Search fonts": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索字体"
+          }
+        }
+      }
+    },
+    "No matches": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有匹配的字体"
+          }
+        }
+      }
+    },
+    "All installed monospaced": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所有等宽字体"
+          }
+        }
+      }
+    },
+    "All installed fonts": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所有系统字体"
+          }
+        }
+      }
+    },
+    "System default": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跟随系统"
           }
         }
       }
@@ -3689,6 +3909,17 @@
         }
       }
     },
+    "No changes after filter": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用过滤后无改动"
+          }
+        }
+      }
+    },
     "Loading…": {
       "extractionState": "manual",
       "localizations": {
@@ -4411,6 +4642,61 @@
           "stringUnit": {
             "state": "translated",
             "value": "无法写入 hooks.json:%@"
+          }
+        }
+      }
+    },
+    "Show macOS notification for agent attention": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "后台 agent 需要关注时弹出 macOS 通知"
+          }
+        }
+      }
+    },
+    "Pop a banner in Notification Center when a background agent needs approval, finishes, or fails. Silent — the chime stays the audio cue.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "后台 agent 需要批准、完成或出错时,在通知中心弹出横幅。静默——声音仍由提示音负责。"
+          }
+        }
+      }
+    },
+    "Waiting for your approval": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待你的批准"
+          }
+        }
+      }
+    },
+    "Agent finished its turn": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任务已完成"
+          }
+        }
+      }
+    },
+    "Agent's turn ended in an error": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "运行出错"
           }
         }
       }

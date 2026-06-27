@@ -409,6 +409,18 @@ private struct GeneralPane: View {
                 Toggle("", isOn: $store.sortCompletedFirst)
                     .toggleStyle(.switch).labelsHidden()
             }
+            SettingsDivider()
+            SettingsRow("Review Changes at repository root",
+                        subtitle: "For plain workspaces whose pane is inside a git repo, review the whole repository instead of just the current directory's subtree.") {
+                Toggle("", isOn: $store.reviewAtRepoRoot)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Reveal in Finder at repository root",
+                        subtitle: "For plain workspaces whose pane is inside a git repo, reveal the repository root instead of the current directory.") {
+                Toggle("", isOn: $store.revealAtRepoRoot)
+                    .toggleStyle(.switch).labelsHidden()
+            }
         }
 
         SettingsCard("New terminals") {
@@ -931,14 +943,6 @@ private struct TerminalPane: View {
     @EnvironmentObject var store: WorkspaceStore
     @State private var shellKeybindsInstallFailed = false
 
-    /// Curated list of monospaced families we know ghostty can resolve.
-    /// Extra families fall back to Menlo via the second `font-family` line
-    /// in `applyGlintTheme`.
-    private let fontFamilies = [
-        "SF Mono", "Menlo", "Monaco", "Courier New",
-        "JetBrains Mono", "Fira Code", "IBM Plex Mono",
-    ]
-
     private let scrollbackSizeChoices: [Int] = [5, 10, 25, 50, 100, 250]
         .map { $0 * 1_000_000 }
 
@@ -946,8 +950,16 @@ private struct TerminalPane: View {
         SettingsCard("Font") {
             SettingsRow("Family", subtitle: "Used for all panes. Falls back to Menlo if missing.") {
                 GlintDropdown(selection: $store.terminalFontFamily,
-                              items: fontFamilies.map { (value: $0, label: $0) },
-                              listWidth: 230)
+                              sections: FontCatalog.mainFontSections(currentSelection: store.terminalFontFamily),
+                              listWidth: 280,
+                              searchable: true)
+            }
+            SettingsDivider()
+            SettingsRow("CJK fallback", subtitle: "Used when the main font is missing CJK glyphs.") {
+                GlintDropdown(selection: $store.terminalCJKFontFamily,
+                              sections: FontCatalog.cjkFontSections(currentSelection: store.terminalCJKFontFamily),
+                              listWidth: 280,
+                              searchable: true)
             }
             SettingsDivider()
             SettingsRow("Size", subtitle: "\(Int(store.terminalFontSize))pt") {
@@ -1317,6 +1329,12 @@ private struct AgentsPane: View {
                     .toggleStyle(.switch).labelsHidden()
             }
             SettingsDivider()
+            SettingsRow("Show macOS notification for agent attention",
+                        subtitle: "Pop a banner in Notification Center when a background agent needs approval, finishes, or fails. Silent — the chime stays the audio cue.") {
+                Toggle("", isOn: $store.systemNotificationOnAgentAttention)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
             SettingsRow("Sound on permission request",
                         subtitle: "Play a chime when an agent is waiting for your approval in a background workspace.") {
                 HStack(spacing: 10) {
@@ -1556,21 +1574,77 @@ private struct CodexHomeSettingsRow: View {
 /// workspace popovers. Items are (value, label) pairs; labels run through
 /// the string catalog (font names and numbers simply pass through
 /// verbatim when no entry exists).
+///
+/// Two flavors:
+/// - Flat list — pass `items`. Renders one continuous list.
+/// - Sectioned — pass `sections`. Each section gets a caption header and
+///   sections are visually separated. Used by the font pickers which mix
+///   a curated "Recommended" list with the full system inventory.
 private struct GlintDropdown<Value: Hashable>: View {
+    typealias Item = (value: Value, label: String)
+    /// `header` 用 `LocalizedStringKey` 而不是 `String`,字面量调用点(如
+    /// `(header: "Recommended", items: ...)`)自动进 xcstrings 目录;变量
+    /// 形式的 `String` 字面量经过编译期推断也走 `LocalizedStringKey`,避免
+    /// 「String 形参偷偷绕过 catalog」的隐式坑(见 CLAUDE.md 本地化章节)。
+    typealias Section = (header: LocalizedStringKey, items: [Item])
+
     @Binding var selection: Value
-    let items: [(value: Value, label: String)]
     /// Width of the popover list; the trigger button sizes to its content.
     var listWidth: CGFloat = 180
+    /// 打开时在顶部插一个搜索框,按 label 做 case-insensitive substring 过滤;
+    /// 短列表(cursor / scrollback / language)默认关。
+    var searchable: Bool = false
+
+    private let flatItems: [Item]
+    private let sections: [Section]?
 
     @State private var isOpen = false
     @State private var hover = false
+    @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
+
+    init(selection: Binding<Value>, items: [Item],
+         listWidth: CGFloat = 180, searchable: Bool = false) {
+        self._selection = selection
+        self.flatItems = items
+        self.sections = nil
+        self.listWidth = listWidth
+        self.searchable = searchable
+    }
+
+    init(selection: Binding<Value>, sections: [Section],
+         listWidth: CGFloat = 180, searchable: Bool = false) {
+        self._selection = selection
+        self.flatItems = sections.flatMap(\.items)
+        self.sections = sections
+        self.listWidth = listWidth
+        self.searchable = searchable
+    }
 
     private var selectedLabel: String {
-        items.first(where: { $0.value == selection })?.label ?? ""
+        flatItems.first(where: { $0.value == selection })?.label ?? ""
     }
 
     private var localizedSelectedLabel: String {
         NSLocalizedString(selectedLabel, comment: "")
+    }
+
+    /// 把搜索词应用到 sections:逐 section 过滤 items,丢掉空 section。
+    /// "Current" 行(若适用)也走同样过滤,保持视觉一致 —— 不匹配就不显示。
+    private var filteredSections: [Section]? {
+        guard let sections else { return nil }
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return sections }
+        return sections.compactMap { s in
+            let kept = s.items.filter { $0.label.localizedCaseInsensitiveContains(query) }
+            return kept.isEmpty ? nil : (header: s.header, items: kept)
+        }
+    }
+
+    private var filteredFlatItems: [Item] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return flatItems }
+        return flatItems.filter { $0.label.localizedCaseInsensitiveContains(query) }
     }
 
     var body: some View {
@@ -1600,20 +1674,13 @@ private struct GlintDropdown<Value: Hashable>: View {
         .onHover { hover = $0 }
         .animation(.easeOut(duration: 0.12), value: isOpen)
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
-            ScrollView {
-                LazyVStack(spacing: 1) {
-                    ForEach(items, id: \.value) { item in
-                        GlintDropdownRow(label: item.label,
-                                         isSelected: item.value == selection) {
-                            selection = item.value
-                            isOpen = false
-                        }
-                    }
+            VStack(spacing: 0) {
+                if searchable {
+                    searchBar
                 }
-                .padding(6)
+                listBody
             }
             .frame(width: listWidth)
-            .frame(maxHeight: 300)
             .background(
                 ZStack {
                     VisualEffectBackground(material: .menu)
@@ -1626,7 +1693,132 @@ private struct GlintDropdown<Value: Hashable>: View {
                     )
                 }
             )
+            .onAppear {
+                searchText = ""
+                if searchable {
+                    // 主线程下一拍再 focus,popover 装载与 first responder 接管之间
+                    // 有 race,直接 set 会被吞掉。
+                    DispatchQueue.main.async { searchFocused = true }
+                }
+            }
         }
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.text3)
+            TextField("Search fonts", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.text1)
+                .focused($searchFocused)
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                    searchFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.text3)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Theme.overlay(0.04))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Theme.divider).frame(height: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var listBody: some View {
+        // maxHeight 必须挂在 ScrollView 本体上,挂到外层 VStack 不会传到
+        // NSPopover 的 contentSize 计算里 —— popover 会拿 ScrollView 的
+        // 「想要全部内容」当 intrinsic,然后被屏幕底边截到一个更小的值,
+        // 看起来就是「调多大都没反应」。
+        ScrollView {
+            LazyVStack(spacing: 1) {
+                if let sections = filteredSections {
+                    if sections.isEmpty {
+                        emptyState
+                    } else {
+                        ForEach(sections.indices, id: \.self) { sIdx in
+                            let s = sections[sIdx]
+                            if sIdx > 0 {
+                                Rectangle()
+                                    .fill(Theme.divider)
+                                    .frame(height: 1)
+                                    .padding(.vertical, 4)
+                            }
+                            GlintDropdownSectionHeader(label: s.header)
+                            ForEach(s.items, id: \.value) { item in
+                                row(for: item)
+                            }
+                        }
+                    }
+                } else {
+                    let items = filteredFlatItems
+                    if items.isEmpty {
+                        emptyState
+                    } else {
+                        ForEach(items, id: \.value) { item in
+                            row(for: item)
+                        }
+                    }
+                }
+            }
+            .padding(6)
+        }
+        // 搜索型给固定 height,非搜索型给 maxHeight:
+        // - searchable(字体列表 300+ 项,远超 maxHeight):必须固定 height,否则
+        //   ScrollView intrinsic = 完整内容,popover 会被屏幕钳到一个看起来跟
+        //   改之前一样的视觉高度。
+        // - 非 searchable(cursor 3 项 / scrollback 6 项,内容远小于 maxHeight):
+        //   intrinsic 就是内容自己的高度,popover 按它排版即可。给固定 height
+        //   会把 100px 内容撑成 360px,下方留一大块空白。
+        .frame(height: searchable ? listMaxHeight : nil)
+        .frame(maxHeight: searchable ? nil : listMaxHeight)
+    }
+
+    private var emptyState: some View {
+        Text("No matches")
+            .font(.system(size: 12))
+            .foregroundStyle(Theme.text3)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 20)
+    }
+
+    /// ScrollView 自己的高度上限。短的扁平下拉(cursor / scrollback)给 360 ——
+    /// 配合 `maxHeight` 让 popover 按内容自适应;搜索型(font / CJK)给 640,
+    /// 配合固定 `height`,300+ 字体能滚得开。
+    private var listMaxHeight: CGFloat { searchable ? 640 : 360 }
+
+    private func row(for item: Item) -> some View {
+        GlintDropdownRow(label: item.label,
+                         isSelected: item.value == selection) {
+            selection = item.value
+            isOpen = false
+        }
+    }
+}
+
+private struct GlintDropdownSectionHeader: View {
+    let label: LocalizedStringKey
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(Theme.text3)
+            .textCase(.uppercase)
+            .tracking(0.5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.top, 4)
+            .padding(.bottom, 2)
     }
 }
 

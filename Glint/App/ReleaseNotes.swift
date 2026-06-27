@@ -52,6 +52,21 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.25-beta.3",
+            en: [
+                "Review window got a big upgrade: side-by-side (split) and unified diff modes, a Changes Only toggle, ignore-whitespace, and Opt+↑/↓ to jump between changes — all switchable from the file header. Plus a root-vs-current-directory toggle so Review (and Reveal in Finder) reads diffs from the side you actually meant when you're in a subdirectory.",
+                "Settings ▸ Terminal now has a CJK fallback font picker — pick a separate font for Chinese / Japanese / Korean characters when your main monospace font doesn't cover them.",
+                "Optional macOS notification when an agent finishes or needs your attention (Settings ▸ General). Routes through Notification Center, so it still reaches you when Glint is in the background.",
+                "Codex Home is now remembered per pane, so workspaces with non-default Homes resume correctly after a restart (#49)."
+            ],
+            zh: [
+                "Review 窗口大升级：并排（split）和统一（unified）两种 diff 视图、Changes Only 切换、忽略空白差异、Opt+↑/↓ 在改动间跳转，全部在文件 header 一键切换。子目录场景还新增了「仓库根 vs 当前目录」开关，让 Review 和「在访达中显示」从你真正想看的那一侧读 diff。",
+                "终端设置新增 CJK 回退字体下拉 —— 主等宽字体不覆盖中日韩字符时，可独立挑一款 fallback。",
+                "Agent 任务完成或需要关注时可选弹原生 macOS 通知（设置 ▸ 通用），通过通知中心送达，Glint 在后台时也能收到。",
+                "Codex Home 按窗格独立记忆，非默认 Home 的工作区重启后能正确 resume (#49)。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.25-beta.2",
             en: [
                 "Light mode now applies to the whole app, not just the terminal — chrome (window, sidebar, glass capsules, dropdowns, sheets) follows your Glint theme instead of staying dark.",
