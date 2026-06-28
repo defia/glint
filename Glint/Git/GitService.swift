@@ -331,6 +331,15 @@ struct GitService {
     /// the short 30s default.
     private static let writeTimeout: TimeInterval = 180
 
+    /// Ceiling for READ ops that can move a lot of data: `git diff` — especially
+    /// `fileDiff`'s `--unified=1000000`, which emits the whole file as context —
+    /// and `--numstat`, particularly over SSH. The 30s `git()` default fits tiny
+    /// probes (status poll, rev-parse, `ls-files` enumeration) but is too tight
+    /// for a large-file diff over a slow link, where it would SIGTERM mid-stream
+    /// and silently yield a blank/truncated result. Internal so GitDiff's read
+    /// callers can opt up; status/poll callers keep the short default.
+    static let readTimeout: TimeInterval = 120
+
     /// Run git, throwing `commandFailed` on a non-zero exit unless `allowFailure`
     /// (used for the many "exit code IS the answer" probes like branch-exists).
     @discardableResult
