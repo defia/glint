@@ -54,6 +54,18 @@ protocol GitRunner: Sendable {
     /// the working tree non-atomically); the SSH runner's ConnectTimeout still
     /// bounds the connect phase. Read/poll callers pass a short ceiling.
     func run(_ args: [String], cwd: String?, timeout: TimeInterval?) async throws -> GitResult
+
+    /// True when `cwd` resolves on a REMOTE host (the SSH runner), so file
+    /// bytes can't be `FileManager`-read — only fetched via a `git` command.
+    /// Lets local fast paths skip a subprocess: e.g. counting untracked-file
+    /// lines by reading the file instead of one `git diff --no-index` spawn
+    /// per file (N untracked files × 4-wide concurrency sat on the Review
+    /// file-list critical path). Defaults to local; `SSHGitRunner` overrides.
+    var isRemote: Bool { get }
+}
+
+extension GitRunner {
+    var isRemote: Bool { false }
 }
 
 /// env flags shared by both runners: never block on a credential prompt, never
@@ -193,6 +205,8 @@ struct SSHGitRunner: GitRunner {
         self.controlPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("glint-ssh-\(safe).sock").path
     }
+
+    var isRemote: Bool { true }
 
     func run(_ args: [String], cwd: String?, timeout: TimeInterval?) async throws -> GitResult {
         let argv = Self.commandArgs(target: target, port: port,

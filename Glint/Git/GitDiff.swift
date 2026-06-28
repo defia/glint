@@ -40,35 +40,7 @@ extension GitService {
                 numstat: (try? await nums)?.stdout ?? "")
             if let u = try? await untrk, u.ok {
                 let paths = u.stdout.split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
-                // Count adds per untracked file via the runner so the right
-                // file is read — under SSH Review, `repo` is a REMOTE path so
-                // a local FileManager read would either return 0 or, worse,
-                // read a coincidentally-same-path LOCAL file. `git diff
-                // --no-index --numstat /dev/null <path>` runs in the runner's
-                // cwd (local or remote) and prints "<adds>\t<dels>\t<path>"
-                // for text, "-\t-\t<path>" for binary (which becomes 0).
-                // Bound concurrency: one git subprocess per untracked file
-                // would otherwise fan out N-wide, and each call pins 3
-                // dispatch threads (runner blocks on the process + 2 pipe
-                // readers) — a repo with many untracked files blows the
-                // 64-thread dispatch ceiling and hangs the app. Seed at most
-                // `maxConcurrent`, refill one as each finishes.
-                let maxConcurrent = 4
-                var iter = paths.makeIterator()
-                let counts = await withTaskGroup(of: (String, Int).self) { group in
-                    for _ in 0..<min(maxConcurrent, paths.count) {
-                        guard let p = iter.next() else { break }
-                        group.addTask { (p, await self.untrackedAddCount(repo: repo, relPath: p)) }
-                    }
-                    var dict: [String: Int] = [:]
-                    for await (p, n) in group {
-                        dict[p] = n
-                        if let next = iter.next() {
-                            group.addTask { (next, await self.untrackedAddCount(repo: repo, relPath: next)) }
-                        }
-                    }
-                    return dict
-                }
+                let counts = await countUntracked(repo: repo, paths: paths)
                 for p in paths {
                     map[p] = GitFileChange(path: p, kind: .untracked,
                                            additions: counts[p] ?? 0,
@@ -153,13 +125,68 @@ extension GitService {
         return out
     }
 
-    /// `+N` line count for an untracked file in the runner's repo (local or
-    /// remote). Uses `git diff --no-index --numstat /dev/null <path>` so the
-    /// SSH runner counts the REMOTE file rather than reading a same-pathed
-    /// LOCAL file via FileManager. Returns 0 for binary (numstat prints `-`)
-    /// and on any error — the Review file list degrades to a missing badge,
-    /// never to a wrong one.
-    private func untrackedAddCount(repo: String, relPath: String) async -> Int {
+    /// Per-untracked-file add counts, branched on the runner. LOCAL reads the
+    /// bytes directly — N untracked files used to mean N `git diff --no-index`
+    /// subprocess spawns (bounded to 4 wide), and the file list blocked on
+    /// every one before it could render. REMOTE can't `FileManager`-read the
+    /// path (it lives on the far host), so it keeps the bounded git spawn.
+    private func countUntracked(repo: String, paths: [String]) async -> [String: Int] {
+        if !runner.isRemote {
+            // No Process, no thread pinning — all files count concurrently in
+            // the cooperative pool, so the list isn't gated on ceil(N/4)
+            // serial rounds of process startup.
+            return await withTaskGroup(of: (String, Int).self) { group in
+                for p in paths {
+                    group.addTask { (p, Self.untrackedAddCountLocal(repo: repo, relPath: p)) }
+                }
+                var dict: [String: Int] = [:]
+                for await (p, n) in group { dict[p] = n }
+                return dict
+            }
+        }
+        // Remote: bytes only reachable via git. Bound concurrency — one
+        // subprocess per file fans out N-wide and each pins 3 dispatch threads
+        // (process + 2 pipe readers), blowing the 64-thread ceiling on a repo
+        // with many untracked files. Seed at most `maxConcurrent`, refill one
+        // as each finishes.
+        let maxConcurrent = 4
+        var iter = paths.makeIterator()
+        return await withTaskGroup(of: (String, Int).self) { group in
+            for _ in 0..<min(maxConcurrent, paths.count) {
+                guard let p = iter.next() else { break }
+                group.addTask { (p, await self.untrackedAddCountRemote(repo: repo, relPath: p)) }
+            }
+            var dict: [String: Int] = [:]
+            for await (p, n) in group {
+                dict[p] = n
+                if let next = iter.next() {
+                    group.addTask { (next, await self.untrackedAddCountRemote(repo: repo, relPath: next)) }
+                }
+            }
+            return dict
+        }
+    }
+
+    /// Local-only: count an untracked file's added lines from its bytes — exact
+    /// for the badge. Each `\n` ends an added line, plus one for trailing
+    /// content with no newline; a NUL byte marks it binary (git's heuristic) →
+    /// 0, and a bad UTF-8 decode → 0 too — both matching `git diff --numstat`'s
+    /// `-`. Static/pure so it's trivially Sendable into the TaskGroup.
+    private static func untrackedAddCountLocal(repo: String, relPath: String) -> Int {
+        let abs = (repo as NSString).appendingPathComponent(relPath)
+        guard let data = FileManager.default.contents(atPath: abs), !data.isEmpty,
+              !data.contains(0),
+              let s = String(data: data, encoding: .utf8) else { return 0 }
+        let newlines = s.reduce(0) { $1 == "\n" ? $0 + 1 : $0 }
+        return newlines + (s.hasSuffix("\n") ? 0 : 1)
+    }
+
+    /// `+N` line count for an untracked file in a REMOTE repo (SSH Review): the
+    /// path only resolves on the far host, so we ask git (running there) via
+    /// `git diff --no-index --numstat /dev/null <path>` instead of reading a
+    /// same-pathed LOCAL file. Returns 0 for binary (numstat prints `-`) and on
+    /// any error — the list degrades to a missing badge, never a wrong one.
+    private func untrackedAddCountRemote(repo: String, relPath: String) async -> Int {
         guard let r = try? await git(["diff", "--no-index", "--numstat", "/dev/null", relPath],
                                      cwd: repo, allowFailure: true) else { return 0 }
         let parts = r.stdout.split(separator: "\n").first?.split(separator: "\t", maxSplits: 2)
