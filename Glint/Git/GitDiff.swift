@@ -47,12 +47,26 @@ extension GitService {
                 // --no-index --numstat /dev/null <path>` runs in the runner's
                 // cwd (local or remote) and prints "<adds>\t<dels>\t<path>"
                 // for text, "-\t-\t<path>" for binary (which becomes 0).
+                // Bound concurrency: one git subprocess per untracked file
+                // would otherwise fan out N-wide, and each call pins 3
+                // dispatch threads (runner blocks on the process + 2 pipe
+                // readers) — a repo with many untracked files blows the
+                // 64-thread dispatch ceiling and hangs the app. Seed at most
+                // `maxConcurrent`, refill one as each finishes.
+                let maxConcurrent = 4
+                var iter = paths.makeIterator()
                 let counts = await withTaskGroup(of: (String, Int).self) { group in
-                    for p in paths {
+                    for _ in 0..<min(maxConcurrent, paths.count) {
+                        guard let p = iter.next() else { break }
                         group.addTask { (p, await self.untrackedAddCount(repo: repo, relPath: p)) }
                     }
                     var dict: [String: Int] = [:]
-                    for await (p, n) in group { dict[p] = n }
+                    for await (p, n) in group {
+                        dict[p] = n
+                        if let next = iter.next() {
+                            group.addTask { (next, await self.untrackedAddCount(repo: repo, relPath: next)) }
+                        }
+                    }
                     return dict
                 }
                 for p in paths {
