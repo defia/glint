@@ -116,7 +116,10 @@ final class ReviewModel: ObservableObject {
         guard token == diffLoadToken else { return }
         // Parse off the main actor so a multi-thousand-line diff doesn't hitch
         // the UI; the result is cached so re-renders (splitter drags) don't reparse.
-        let doc = await Task.detached(priority: .userInitiated) { DiffDocument(text: text) }.value
+        let language = SyntaxLanguage.from(path: f.path)
+        let doc = await Task.detached(priority: .userInitiated) {
+            DiffDocument(text: text, language: language)
+        }.value
         guard token == diffLoadToken else { return }
         diffText = text
         diff = doc
@@ -768,6 +771,10 @@ struct DiffLine: Identifiable, Sendable {
     let id: Int
     let kind: Kind
     let text: String
+    /// Syntax-highlighted `text`. Token ranges carry `.foregroundColor`; the
+    /// rest is left unattributed so the row's base `.foregroundStyle` (the
+    /// add/del tint) still shows through on neutral text.
+    let attributed: AttributedString
     let oldNum: Int?
     let newNum: Int?
 }
@@ -798,8 +805,8 @@ struct DiffDocument: Sendable {
         self.oldWidth = oldWidth; self.newWidth = newWidth
     }
 
-    init(text: String) {
-        let parsed = Self.parse(text)
+    init(text: String, language: SyntaxLanguage? = nil) {
+        let parsed = Self.parse(text, language: language)
         // Size each gutter column to its widest number; drop a column that's
         // empty for the whole diff (pure additions hide the old column, etc.).
         let maxOld = parsed.compactMap(\.oldNum).max() ?? 0
@@ -817,10 +824,15 @@ struct DiffDocument: Sendable {
 
     /// Walk the unified diff, tracking old/new line numbers from each `@@` hunk
     /// header and dropping file-level meta lines.
-    static func parse(_ text: String) -> [DiffLine] {
+    static func parse(_ text: String, language: SyntaxLanguage? = nil) -> [DiffLine] {
         var out: [DiffLine] = []
         var oldLine = 0, newLine = 0
         var id = 0
+        // Syntax state carried across lines within a hunk so a block comment /
+        // triple string opened on an earlier line keeps tinting its body. Reset
+        // at each @@ header. ponytail: single stream — a deleted line inside an
+        // old-file block comment borrows the new-file state and may mis-tint.
+        var hlState = SyntaxHighlighter.State()
         // Normalize CRLF / lone CR to LF before splitting. Swift treats "\r\n" as
         // a single Character (extended grapheme cluster), so split(separator: "\n")
         // never matches it and silently merges every CRLF-terminated line into one
@@ -836,8 +848,10 @@ struct DiffDocument: Sendable {
             // the diff's final newline; real blank context lines are " ".
             if line.isEmpty { continue }
             if line.hasPrefix("@@") {
+                hlState = SyntaxHighlighter.State()   // new hunk → tint from a clean slate
                 (oldLine, newLine) = parseHunk(line)
-                out.append(DiffLine(id: id, kind: .hunk, text: line, oldNum: nil, newNum: nil)); id += 1
+                out.append(DiffLine(id: id, kind: .hunk, text: line,
+                                    attributed: AttributedString(line), oldNum: nil, newNum: nil)); id += 1
                 continue
             }
             if line.hasPrefix("+++") || line.hasPrefix("---") { continue }
@@ -852,13 +866,16 @@ struct DiffDocument: Sendable {
             // gutter clutter is gone — add/delete is shown via tint, not text.
             let body = String(line.dropFirst())
             if line.hasPrefix("+") {
-                out.append(DiffLine(id: id, kind: .add, text: body, oldNum: nil, newNum: newLine)); id += 1
+                let attr = SyntaxHighlighter.highlight(body, language: language, state: &hlState)
+                out.append(DiffLine(id: id, kind: .add, text: body, attributed: attr, oldNum: nil, newNum: newLine)); id += 1
                 newLine += 1
             } else if line.hasPrefix("-") {
-                out.append(DiffLine(id: id, kind: .del, text: body, oldNum: oldLine, newNum: nil)); id += 1
+                let attr = SyntaxHighlighter.highlight(body, language: language, state: &hlState)
+                out.append(DiffLine(id: id, kind: .del, text: body, attributed: attr, oldNum: oldLine, newNum: nil)); id += 1
                 oldLine += 1
             } else if line.hasPrefix(" ") {
-                out.append(DiffLine(id: id, kind: .context, text: body, oldNum: oldLine, newNum: newLine)); id += 1
+                let attr = SyntaxHighlighter.highlight(body, language: language, state: &hlState)
+                out.append(DiffLine(id: id, kind: .context, text: body, attributed: attr, oldNum: oldLine, newNum: newLine)); id += 1
                 oldLine += 1; newLine += 1
             }
             // else: a meta line (diff/index/mode/rename/…/\ No newline) — skip.
@@ -1140,7 +1157,7 @@ private struct DiffContentView: View {
                 .frame(maxHeight: .infinity)
                 .background(c.gutter)
 
-                Text(line.text.isEmpty ? " " : line.text)
+                Text(line.text.isEmpty ? AttributedString(" ") : line.attributed)
                     .font(.system(size: 11.5, design: .monospaced))
                     .foregroundStyle(c.fg)
                     .textSelection(.enabled)
@@ -1199,7 +1216,7 @@ private struct DiffContentView: View {
     private func sideContent(_ line: DiffLine?, lineNo: Int?, width: CGFloat) -> some View {
         HStack(spacing: 0) {
             num(lineNo, width: width)
-            Text((line?.text).map { $0.isEmpty ? " " : $0 } ?? " ")
+            Text(line.map { $0.text.isEmpty ? AttributedString(" ") : $0.attributed } ?? AttributedString(" "))
                 .font(.system(size: 11.5, design: .monospaced))
                 .foregroundStyle(line == nil ? Theme.text4 : Self.tint(line!.kind).fg)
                 .textSelection(.enabled)
