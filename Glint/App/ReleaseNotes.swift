@@ -52,6 +52,17 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.26-beta.1",
+            en: [
+                "Glint now accepts folders from Finder Open With, dock drops, external launchers, and `open -a Glint <path>`. Folders open directly as workspaces, git folders light up Review / worktree actions, and reopening the same path switches back to the existing workspace instead of duplicating it.",
+                "Plain files and `glint://open?path=...` links are supported too. Executable files ask before running in their parent folder, non-executable files are refused up front, and reopening an archived matching workspace brings it back automatically."
+            ],
+            zh: [
+                "Glint 现在可以接收 Finder「打开方式」、Dock 拖入、外部启动器以及 `open -a Glint <路径>` 传来的文件夹。文件夹会直接打开成工作区;git 目录会点亮 Review / worktree 操作;重复打开同一路径会切回已有工作区,不再重复创建。",
+                "普通文件和 `glint://open?path=...` 链接也支持了。可执行文件会先确认,再在父目录里运行;非可执行文件会提前拒绝;如果命中的是已归档的同一路径工作区,会自动取消归档并切过去。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.25-beta.6",
             en: [
                 "Review now refreshes automatically when its window regains focus, keeps the selected file in sync with filters, and stays smoother while resizing the file sidebar. The file list also handles narrow sidebars better so change counts no longer wrap awkwardly.",
