@@ -17,6 +17,10 @@ final class ReviewModel: ObservableObject {
     /// or nil for the whole repo. See `reload`'s prefix filter.
     let subdir: String?
     let availableScopes: [DiffScope]
+    /// True when the review runs over SSH (SSHGitRunner). File-level actions
+    /// (Copy Path / Reveal / Open) target the LOCAL filesystem, so the file
+    /// list hides them for a remote repo — the paths don't exist locally.
+    let isRemote: Bool
 
     @Published var scope: DiffScope { didSet { Task { await reload() } } }
     // Whitespace-only changes treated as non-changes (--ignore-all-space). A
@@ -46,10 +50,12 @@ final class ReviewModel: ObservableObject {
     private var diffLoadToken = 0   // guards against out-of-order diff loads
 
     init(repo: String, title: String, subdir: String? = nil, scopes: [DiffScope],
+         isRemote: Bool = false,
          runner: GitRunner = LocalGitRunner()) {
         self.repo = repo
         self.title = title
         self.subdir = subdir
+        self.isRemote = isRemote
         self.availableScopes = scopes.isEmpty ? [.workingTree] : scopes
         self.scope = scopes.first ?? .workingTree
         self.git = GitService(runner: runner)
@@ -562,7 +568,7 @@ private struct FileListView: View {
 
     private func fileRow(_ file: GitFileChange, indent: CGFloat, showDir: Bool) -> some View {
         let selected = model.selected?.path == file.path
-        return Button {
+        let row = Button {
             Task { await model.select(file) }
         } label: {
             HStack(spacing: 7) {
@@ -598,6 +604,49 @@ private struct FileListView: View {
         }
         .buttonStyle(.plain)
         .help(Text(file.path))
+
+        // Right-click → filesystem actions on the file's full local path.
+        // Hidden for remote reviews (paths don't exist locally). A deleted
+        // file isn't on disk, so Reveal falls back to its parent folder and
+        // Open is omitted entirely.
+        return Group {
+            if model.isRemote {
+                row
+            } else {
+                row.contextMenu {
+                    Button("Copy Path") { copyFilePath(file) }
+                    Button("Reveal in Finder") { revealFile(file) }
+                    if FileManager.default.fileExists(atPath: fullPath(for: file)) {
+                        Button("Open") { openFile(file) }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Full local path of a reviewed file: repo root + its root-relative path.
+    private func fullPath(for file: GitFileChange) -> String {
+        (model.repo as NSString).appendingPathComponent(file.path)
+    }
+
+    private func copyFilePath(_ file: GitFileChange) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(fullPath(for: file), forType: .string)
+    }
+
+    private func revealFile(_ file: GitFileChange) {
+        let full = fullPath(for: file)
+        let url = URL(fileURLWithPath: full)
+        // A deleted file isn't on disk — reveal its containing folder instead.
+        let target = FileManager.default.fileExists(atPath: full) ? url
+            : url.deletingLastPathComponent()
+        NSWorkspace.shared.activateFileViewerSelecting([target])
+    }
+
+    private func openFile(_ file: GitFileChange) {
+        let full = fullPath(for: file)
+        guard FileManager.default.fileExists(atPath: full) else { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: full))
     }
 
     @ViewBuilder
@@ -1518,7 +1567,8 @@ final class ReviewWindowController: NSObject, NSWindowDelegate {
     func present(repo: String, title: String, subdir: String? = nil,
                  scopes: [DiffScope], store: WorkspaceStore,
                  runner: GitRunner = LocalGitRunner()) {
-        let model = ReviewModel(repo: repo, title: title, subdir: subdir, scopes: scopes, runner: runner)
+        let model = ReviewModel(repo: repo, title: title, subdir: subdir, scopes: scopes,
+                                isRemote: runner is SSHGitRunner, runner: runner)
         self.model = model
         let root = ReviewView(model: model)
             .frame(minWidth: 780, minHeight: 480)
