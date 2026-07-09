@@ -850,6 +850,16 @@ private struct TabChip: View {
         .paneSummaryPopover(paneInfos.count >= 2 ? paneInfos : [], store: store,
                             suppressed: isDragging || reordering)
         .contextMenu {
+            Button("New Tab") { store.newTab() }
+            Divider()
+            Button("Close Tab") { store.closeTab(tab.id) }
+                .disabled(ws.tabs.count <= 1)
+            Button("Close Other Tabs") { store.closeOtherTabs(keeping: tab.id) }
+                .disabled(ws.tabs.count <= 1)
+            Divider()
+            Button("Copy Path") { store.copyTabPath(tab.id) }
+            Button("Reveal in Finder") { store.revealTabInFinder(tab.id) }
+            Divider()
             Button("Rename") { startEditing() }
         }
         // Lift the dragged chip above its neighbours — same shape as the

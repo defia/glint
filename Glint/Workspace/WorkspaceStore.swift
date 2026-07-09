@@ -456,7 +456,10 @@ extension Workspace {
         return "\(display)\n\(cwd)"
     }
 
-    private func tabCwd(_ tab: WorkspaceTab) -> String? {
+    /// Focused pane's cwd for a tab, falling back to the first pane that has
+    /// reported one. Internal so `WorkspaceStore`'s per-tab Copy Path /
+    /// Reveal-in-Finder can resolve the same cwd the chip label shows.
+    func tabCwd(_ tab: WorkspaceTab) -> String? {
         panes[tab.focusedPane]?.workingDirectory
             ?? tab.root.leaves.compactMap { panes[$0]?.workingDirectory }.first
     }
@@ -2508,6 +2511,52 @@ final class WorkspaceStore: ObservableObject {
             return
         }
         let wasSelected = workspaces[i].selectedTabID == tabID
+        teardownTab(at: t, in: i, wsID: wsID)
+        if wasSelected {
+            let nextIdx = min(t, workspaces[i].tabs.count - 1)
+            workspaces[i].selectedTabID = workspaces[i].tabs[nextIdx].id
+        }
+    }
+
+    /// Close every tab in the current workspace except `keepID`. Confirms once
+    /// if any pane in a doomed tab is still running something, then tears them
+    /// down without re-prompting (per-tab `closeTab` would re-ask and shift
+    /// indices mid-loop). Leaves the kept tab selected. Mirrors `closeTab`'s
+    /// no-op-when-empty + busy-confirmation shape.
+    func closeOtherTabs(keeping keepID: TabID) {
+        guard let i = currentIndex,
+              workspaces[i].tabs.contains(where: { $0.id == keepID }) else { return }
+        let doomed = workspaces[i].tabs.indices
+            .filter { workspaces[i].tabs[$0].id != keepID }
+        guard !doomed.isEmpty else { NSSound.beep(); return }
+        let wsID = workspaces[i].id
+        let doomedPanes = doomed.flatMap { workspaces[i].tabs[$0].root.leaves }
+        let busy = doomedPanes.contains {
+            paneNeedsCloseConfirmation(WorkspacePaneKey(workspace: wsID, pane: $0))
+        }
+        if busy,
+           !Self.confirmDestruction(
+               message: String(localized: "Close other tabs?"),
+               informative: String(localized: "Something is still running in them and will be terminated."),
+               confirmTitle: String(localized: "Close Tabs"),
+               suppressionKey: "glint.suppressCloseTabConfirm"
+           ) {
+            return
+        }
+        // Tear down highest index first so earlier indices stay valid as we
+        // remove — `teardownTab` removes at the given position.
+        for t in doomed.sorted(by: >) {
+            teardownTab(at: t, in: i, wsID: wsID)
+        }
+        workspaces[i].selectedTabID = keepID
+    }
+
+    /// Remove one tab (at `index` in `workspaces[i]`) and tear down every pane
+    /// it owns — surfaces, scrollback, agent/process state, dock badge. No
+    /// confirmation and no selection fixup: `closeTab`/`closeOtherTabs` own
+    /// those. Caller guarantees `index` is valid at call time.
+    private func teardownTab(at index: Int, in i: Int, wsID: UUID) {
+        let panes = workspaces[i].tabs[index].root.leaves
         for pane in panes {
             let key = WorkspacePaneKey(workspace: wsID, pane: pane)
             workspaces[i].panes.removeValue(forKey: pane)
@@ -2518,11 +2567,7 @@ final class WorkspaceStore: ObservableObject {
             paneProcesses.removeValue(forKey: key)
             clearDockBadge(for: key)
         }
-        workspaces[i].tabs.remove(at: t)
-        if wasSelected {
-            let nextIdx = min(t, workspaces[i].tabs.count - 1)
-            workspaces[i].selectedTabID = workspaces[i].tabs[nextIdx].id
-        }
+        workspaces[i].tabs.remove(at: index)
     }
 
     func selectTab(_ tabID: TabID) {
@@ -2998,6 +3043,35 @@ final class WorkspaceStore: ObservableObject {
         } else {
             Self.openInFinder(base)
         }
+    }
+
+    /// Per-tab "Copy Path": copies the tab's focused-pane cwd — the same value
+    /// the chip's tooltip shows — so a background tab's directory is reachable
+    /// without first selecting it. Works outside git repos. Beeps when no cwd
+    /// has been reported yet (fresh pane), mirroring the no-op guards elsewhere.
+    func copyTabPath(_ tabID: TabID) {
+        guard let ws = selectedWorkspace,
+              let tab = ws.tabs.first(where: { $0.id == tabID }),
+              let cwd = ws.tabCwd(tab) else { NSSound.beep(); return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(cwd, forType: .string)
+    }
+
+    /// Per-tab "Reveal in Finder": reveals the tab's focused-pane cwd, falling
+    /// back to the workspace's known root when the pane hasn't reported a cwd
+    /// yet (fresh pane). Beeps when nothing resolves — including remote-SSH
+    /// panes, where there's no local directory to reveal.
+    func revealTabInFinder(_ tabID: TabID) {
+        guard let ws = selectedWorkspace,
+              let tab = ws.tabs.first(where: { $0.id == tabID }) else { return }
+        if remoteContext(for: ws) != nil { NSSound.beep(); return }
+        if let cwd = ws.tabCwd(tab) { Self.openInFinder(cwd); return }
+        if let root = ws.source.worktreePath ?? ws.source.repoRoot
+            ?? ws.source.gitPath ?? effectiveGitPath(for: ws) {
+            Self.openInFinder(root)
+            return
+        }
+        NSSound.beep()
     }
 
     /// Open the read-only Review window for a workspace. Always offers the

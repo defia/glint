@@ -859,7 +859,40 @@
         }
       }
     },
+    "Close Other Tabs": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭其他标签页"
+          }
+        }
+      }
+    },
+    "Close other tabs?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭其他标签页?"
+          }
+        }
+      }
+    },
     "Close Tab": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭标签页"
+          }
+        }
+      }
+    },
+    "Close Tabs": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
@@ -3940,6 +3973,17 @@
     },
     "Something is still running in it and will be terminated.": {
       "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其中仍有任务在运行,关闭后会被终止。"
+          }
+        }
+      }
+    },
+    "Something is still running in them and will be terminated.": {
+      "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
