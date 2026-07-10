@@ -2539,7 +2539,10 @@ final class WorkspaceStore: ObservableObject {
                message: String(localized: "Close other tabs?"),
                informative: String(localized: "Something is still running in them and will be terminated."),
                confirmTitle: String(localized: "Close Tabs"),
-               suppressionKey: "glint.suppressCloseTabConfirm"
+               // Separate from the single-tab key: a user who suppressed the
+               // low-stakes one-tab prompt hasn't consented to silently
+               // terminating every running agent across the other tabs.
+               suppressionKey: "glint.suppressCloseOtherTabsConfirm"
            ) {
             return
         }
@@ -3048,26 +3051,29 @@ final class WorkspaceStore: ObservableObject {
     /// Per-tab "Copy Path": copies the tab's focused-pane cwd — the same value
     /// the chip's tooltip shows — so a background tab's directory is reachable
     /// without first selecting it. Works outside git repos. Beeps when no cwd
-    /// has been reported yet (fresh pane), mirroring the no-op guards elsewhere.
+    /// has been reported yet (fresh pane) or the tab is a remote-SSH session
+    /// (no local path to copy), mirroring the no-op guards elsewhere.
     func copyTabPath(_ tabID: TabID) {
         guard let ws = selectedWorkspace,
-              let tab = ws.tabs.first(where: { $0.id == tabID }),
-              let cwd = ws.tabCwd(tab) else { NSSound.beep(); return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(cwd, forType: .string)
+              let tab = ws.tabs.first(where: { $0.id == tabID }) else { return }
+        if isRemotePane(wsID: ws.id, pane: tab.focusedPane) { NSSound.beep(); return }
+        guard let cwd = ws.tabCwd(tab) else { NSSound.beep(); return }
+        Self.copyPath(cwd)
     }
 
     /// Per-tab "Reveal in Finder": reveals the tab's focused-pane cwd, falling
     /// back to the workspace's known root when the pane hasn't reported a cwd
-    /// yet (fresh pane). Beeps when nothing resolves — including remote-SSH
-    /// panes, where there's no local directory to reveal.
+    /// yet (fresh pane). Remote-ness is checked per-pane on the tab's focused
+    /// pane (not `remoteContext(for:)`, which reads the SELECTED tab and would
+    /// guard the wrong tab when right-clicking a background tab). Beeps when
+    /// nothing resolves — including remote-SSH panes, where there's no local
+    /// directory to reveal.
     func revealTabInFinder(_ tabID: TabID) {
         guard let ws = selectedWorkspace,
               let tab = ws.tabs.first(where: { $0.id == tabID }) else { return }
-        if remoteContext(for: ws) != nil { NSSound.beep(); return }
+        if isRemotePane(wsID: ws.id, pane: tab.focusedPane) { NSSound.beep(); return }
         if let cwd = ws.tabCwd(tab) { Self.openInFinder(cwd); return }
-        if let root = ws.source.worktreePath ?? ws.source.repoRoot
-            ?? ws.source.gitPath ?? effectiveGitPath(for: ws) {
+        if let root = knownRoot(for: ws) {
             Self.openInFinder(root)
             return
         }
@@ -3077,17 +3083,18 @@ final class WorkspaceStore: ObservableObject {
     /// Global ⌘⇧C: copy the focused pane's cwd to the clipboard — the
     /// "where am I right now" path, useful to paste into chat/docs/another
     /// terminal. Cwd-first; when no cwd has been reported yet (fresh pane)
-    /// falls back to the workspace's known root. Unlike Reveal in Finder it
-    /// deliberately ignores `revealAtRepoRoot`: "copy path" should give the
-    /// literal current directory, never silently jump to the repo root.
-    /// Beeps when nothing resolves.
+    /// falls back to the workspace's known root. A remote-SSH focused pane
+    /// beeps (its `workingDirectory` is the ssh client's local launch dir, not
+    /// a useful path to copy) — consistent with Reveal in Finder. Unlike
+    /// Reveal it deliberately ignores `revealAtRepoRoot`: "copy path" should
+    /// give the literal current directory, never silently jump to the repo
+    /// root. Beeps when nothing resolves.
     func copyCurrentPath() {
         guard let ws = selectedWorkspace else { NSSound.beep(); return }
+        if let fp = ws.selectedTab?.focusedPane, isRemotePane(wsID: ws.id, pane: fp) { NSSound.beep(); return }
         let paneCwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
-        if let path = paneCwd ?? ws.source.worktreePath ?? ws.source.repoRoot
-            ?? ws.source.gitPath ?? effectiveGitPath(for: ws) {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(path, forType: .string)
+        if let path = paneCwd ?? knownRoot(for: ws) {
+            Self.copyPath(path)
         } else {
             NSSound.beep()
         }
@@ -3282,10 +3289,29 @@ final class WorkspaceStore: ObservableObject {
         return (ctx.target, ctx.port, ctx.remotePath, view.remoteHost)
     }
 
+    /// True iff this pane's live surface is a capturable SSH session with a
+    /// known remote path — i.e. there's no LOCAL directory to reveal or copy
+    /// (the pane's `workingDirectory` snapshot is just the ssh client's stale
+    /// local launch dir). Per-pane, unlike `remoteContext(for:)` which reads
+    /// the SELECTED tab; tab-scoped actions (right-click a background tab's
+    /// Copy/Reveal) pass that tab's focused pane so they guard the right tab.
+    private func isRemotePane(wsID: UUID, pane: PaneID) -> Bool {
+        surfaceViews[WorkspacePaneKey(workspace: wsID, pane: pane)]?.remoteReviewContext != nil
+    }
+
     func effectiveGitPath(for ws: Workspace) -> String? {
         if let p = ws.source.gitPath { return p }
         return (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
             ?? ws.panes.values.compactMap(\.workingDirectory).first
+    }
+
+    /// Best-known LOCAL root for a workspace — the last-resort fallback when a
+    /// pane hasn't reported a cwd yet (fresh pane). Shared by the per-tab /
+    /// global Copy Path and Reveal-in-Finder so both resolve the same root.
+    /// `effectiveGitPath(for:)` already checks `gitPath` first, so no separate
+    /// `gitPath ??` coalesce is needed (it was a dead branch).
+    private func knownRoot(for ws: Workspace) -> String? {
+        ws.source.worktreePath ?? ws.source.repoRoot ?? effectiveGitPath(for: ws)
     }
 
     /// Root-relative path of `cwd` under `root`, or nil if `cwd` is the root
@@ -3316,6 +3342,14 @@ final class WorkspaceStore: ObservableObject {
     /// parent). Shared by every Reveal-in-Finder path.
     static func openInFinder(_ path: String) {
         NSWorkspace.shared.open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
+    }
+
+    /// Copy a filesystem path to the clipboard, clearing first. Shared by every
+    /// Copy Path entry point (⌘⇧C, the tab/surface context menus, the Review
+    /// file list) so pasteboard behavior lives in one place.
+    static func copyPath(_ path: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(path, forType: .string)
     }
 
     func gitStatus(for id: UUID) -> GitStatus? { gitStatuses[id] }
@@ -3637,7 +3671,6 @@ extension WorkspaceStore {
         }
     }
 
-    /// Attention ranking shared by the status merge and the icon pick.
     private func statusRank(_ s: PaneAgentStatus) -> Int {
         switch s {
         case .needsPermission: return 5

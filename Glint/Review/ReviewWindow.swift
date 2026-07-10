@@ -630,8 +630,7 @@ private struct FileListView: View {
     }
 
     private func copyFilePath(_ file: GitFileChange) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(fullPath(for: file), forType: .string)
+        WorkspaceStore.copyPath(fullPath(for: file))
     }
 
     private func revealFile(_ file: GitFileChange) {
