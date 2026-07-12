@@ -86,7 +86,7 @@ final class AgentHookRoutingTests: XCTestCase {
 
         let reporter = Process()
         reporter.executableURL = URL(fileURLWithPath: "/bin/sh")
-        reporter.arguments = [script.path, "UserPromptSubmit", "codex"]
+        reporter.arguments = [script.path, "PermissionRequest", "codex"]
         var environment = ProcessInfo.processInfo.environment
         environment["GLINT_PANE_ID"] = "12345678-1234-1234-1234-123456789ABC:7"
         environment["GLINT_AGENT_SOCK"] = socket.path
@@ -95,7 +95,7 @@ final class AgentHookRoutingTests: XCTestCase {
         reporter.standardInput = input
         try reporter.run()
         input.fileHandleForWriting.write(
-            Data(#"{"session_id":"session-123","cwd":"/tmp/repo"}"#.utf8)
+            Data(#"{"session_id":"session-123","turn_id":"turn-123","transcript_path":"/tmp/codex.jsonl","cwd":"/tmp/repo"}"#.utf8)
         )
         try input.fileHandleForWriting.close()
         reporter.waitUntilExit()
@@ -109,10 +109,77 @@ final class AgentHookRoutingTests: XCTestCase {
         let line = listenerOutput.fileHandleForReading.readDataToEndOfFile()
         XCTAssertEqual(AgentBridge.decodeHookLine(line), [
             "pane": "12345678-1234-1234-1234-123456789ABC:7",
-            "hook": "UserPromptSubmit",
+            "hook": "PermissionRequest",
             "agent": "codex",
             "session": "session-123",
+            "turn": "turn-123",
+            "transcript": "/tmp/codex.jsonl",
         ])
+    }
+
+    func testCodexApprovalReviewerComesFromMatchingTurnContext() throws {
+        let transcript = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-rollout-\(UUID().uuidString).jsonl")
+        let fixture = """
+        {"type":"turn_context","payload":{"turn_id":"turn-user","approvals_reviewer":"user"}}
+        {"type":"turn_context","payload":{"turn_id":"turn-auto","approvals_reviewer":"auto_review"}}
+        """
+        try fixture.write(to: transcript, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+
+        XCTAssertEqual(
+            AgentBridge.codexApprovalReviewer(
+                transcriptPath: transcript.path,
+                turnID: "turn-auto"
+            ),
+            "auto_review"
+        )
+        XCTAssertEqual(
+            AgentBridge.codexApprovalReviewer(
+                transcriptPath: transcript.path,
+                turnID: "turn-user"
+            ),
+            "user"
+        )
+        XCTAssertNil(
+            AgentBridge.codexApprovalReviewer(
+                transcriptPath: transcript.path,
+                turnID: "turn-missing"
+            )
+        )
+    }
+
+    @MainActor
+    func testCodexAutoReviewPermissionRequestDoesNotWaitForUser() {
+        XCTAssertEqual(
+            WorkspaceStore.permissionRequestStatus(
+                kind: .codex,
+                approvalsReviewer: "auto_review"
+            ),
+            .thinking
+        )
+        XCTAssertEqual(
+            WorkspaceStore.permissionRequestStatus(
+                kind: .codex,
+                approvalsReviewer: "guardian_subagent"
+            ),
+            .thinking
+        )
+        XCTAssertEqual(
+            WorkspaceStore.permissionRequestStatus(kind: .codex, approvalsReviewer: "user"),
+            .needsPermission
+        )
+        XCTAssertEqual(
+            WorkspaceStore.permissionRequestStatus(kind: .codex, approvalsReviewer: nil),
+            .needsPermission
+        )
+        XCTAssertEqual(
+            WorkspaceStore.permissionRequestStatus(
+                kind: .claude,
+                approvalsReviewer: "auto_review"
+            ),
+            .needsPermission
+        )
     }
 
     /// Without PANE/SOCK the reporter must still exit 0 and drain stdin —
