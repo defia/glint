@@ -1762,8 +1762,12 @@ final class WorkspaceStore: ObservableObject {
         approvalsReviewer: String?
     ) -> PaneAgentStatus {
         guard kind == .codex else { return .needsPermission }
+        // Only `auto_review` (Codex's guardian subagent) approves without the
+        // human. `user`, nil, or any unrecognised reviewer still needs a person
+        // — see AgentBridge.codexApprovalReviewer for why the default is
+        // conservative rather than "anything but user".
         switch approvalsReviewer {
-        case "auto_review", "guardian_subagent": return .thinking
+        case "auto_review": return .thinking
         default: return .needsPermission
         }
     }

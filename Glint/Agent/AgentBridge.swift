@@ -195,7 +195,19 @@ final class AgentBridge {
     /// user or auto reviewer, and the hook payload does not expose that
     /// reviewer. The matching turn_context in the supplied rollout does.
     /// Read only the tail so a long-lived session cannot stall hook routing.
-    static func codexApprovalReviewer(transcriptPath: String, turnID: String) -> String? {
+    ///
+    /// `approvals_reviewer` is one of `"user"` (a human approves) or
+    /// `"auto_review"` (Codex's guardian subagent approves) — the only values
+    /// observed in real rollouts. Anything else, or a missing field, yields
+    /// `nil`: the caller treats that as "needs permission", since a false
+    /// alert is safe and silently suppressing a real prompt is not.
+    /// `maxTailBytes` defaults to the production cap and is overridable only
+    /// so the tail-window logic can be exercised without writing megabytes.
+    static func codexApprovalReviewer(
+        transcriptPath: String,
+        turnID: String,
+        maxTailBytes: UInt64 = 8 * 1024 * 1024
+    ) -> String? {
         guard !turnID.isEmpty else { return nil }
         let url = URL(fileURLWithPath: transcriptPath).standardizedFileURL
         guard url.pathExtension == "jsonl",
@@ -203,8 +215,7 @@ final class AgentBridge {
         defer { try? handle.close() }
 
         let end = handle.seekToEndOfFile()
-        let maxBytes: UInt64 = 8 * 1024 * 1024
-        let start = end > maxBytes ? end - maxBytes : 0
+        let start = end > maxTailBytes ? end - maxTailBytes : 0
         handle.seek(toFileOffset: start)
         var data = handle.readDataToEndOfFile()
         if start > 0 {
@@ -219,7 +230,7 @@ final class AgentBridge {
                   payload["turn_id"] as? String == turnID,
                   let reviewer = payload["approvals_reviewer"] as? String else { continue }
             switch reviewer {
-            case "user", "auto_review", "guardian_subagent": return reviewer
+            case "user", "auto_review": return reviewer
             default: return nil
             }
         }

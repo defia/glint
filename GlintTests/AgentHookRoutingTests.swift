@@ -149,6 +149,46 @@ final class AgentHookRoutingTests: XCTestCase {
         )
     }
 
+    /// The tail window must drop turn_context lines older than `maxTailBytes`,
+    /// including a matching one, so a multi-MB session can't stall routing. A
+    /// tiny window keeps the fixture cheap while still exercising the
+    /// partial-first-line drop the production 8 MB cap relies on.
+    func testCodexApprovalReviewerIgnoresTurnContextBeyondTailWindow() throws {
+        let transcript = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-tail-\(UUID().uuidString).jsonl")
+        let decoy = #"{"type":"turn_context","payload":{"turn_id":"turn-x","approvals_reviewer":"user"}}"#
+        let live = #"{"type":"turn_context","payload":{"turn_id":"turn-x","approvals_reviewer":"auto_review"}}"#
+        // One long newline-free line pushes the decoy out of the window; the
+        // read offset lands inside it, so this also covers the
+        // drop-up-to-first-newline branch.
+        let filler = String(repeating: "x", count: 512)
+        let window: UInt64 = 128
+
+        // Decoy sits beyond the window → only the tail `live` line is visible,
+        // so we resolve auto_review rather than the head's user.
+        try "\(decoy)\n\(filler)\n\(live)\n".write(to: transcript, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        XCTAssertEqual(
+            AgentBridge.codexApprovalReviewer(
+                transcriptPath: transcript.path,
+                turnID: "turn-x",
+                maxTailBytes: window
+            ),
+            "auto_review"
+        )
+
+        // With no match in the tail, the head decoy must not be seen — a
+        // broken window would return "user" here.
+        try "\(decoy)\n\(filler)\n".write(to: transcript, atomically: true, encoding: .utf8)
+        XCTAssertNil(
+            AgentBridge.codexApprovalReviewer(
+                transcriptPath: transcript.path,
+                turnID: "turn-x",
+                maxTailBytes: window
+            )
+        )
+    }
+
     @MainActor
     func testCodexAutoReviewPermissionRequestDoesNotWaitForUser() {
         XCTAssertEqual(
@@ -158,12 +198,15 @@ final class AgentHookRoutingTests: XCTestCase {
             ),
             .thinking
         )
+        // Any reviewer other than auto_review (incl. future/unknown values)
+        // still surfaces as needs-permission: a false alert is safe, silently
+        // suppressing a real prompt is not.
         XCTAssertEqual(
             WorkspaceStore.permissionRequestStatus(
                 kind: .codex,
-                approvalsReviewer: "guardian_subagent"
+                approvalsReviewer: "some_future_reviewer"
             ),
-            .thinking
+            .needsPermission
         )
         XCTAssertEqual(
             WorkspaceStore.permissionRequestStatus(kind: .codex, approvalsReviewer: "user"),
