@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @EnvironmentObject var store: WorkspaceStore
+    @EnvironmentObject private var activity: PaneActivityStore
     @EnvironmentObject var usage: UsageStore
     @State private var searchText: String = ""
     @FocusState private var searchFocused: Bool
@@ -608,6 +609,7 @@ private struct CardFrameKey: PreferenceKey {
 
 private struct WorkspaceCard: View {
     @EnvironmentObject var store: WorkspaceStore
+    @EnvironmentObject private var activity: PaneActivityStore
     /// System "Reduce Motion" — when on, the looping decorations (border
     /// glow, pulsing dots/borders, mascot animation) render as static states.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
