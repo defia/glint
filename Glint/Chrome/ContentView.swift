@@ -1170,6 +1170,7 @@ struct TabIcon: View {
 /// the workspace switcher's dropdown, with select-on-click and hover-close.
 private struct TabOverflowChip: View {
     @EnvironmentObject var store: WorkspaceStore
+    @EnvironmentObject private var activity: PaneActivityStore
     let ws: Workspace
     let tabs: [WorkspaceTab]
     @State private var isOpen = false
@@ -1202,6 +1203,7 @@ private struct TabOverflowChip: View {
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             TabOverflowPopover(ws: ws, tabs: tabs) { isOpen = false }
                 .environmentObject(store)
+                .environmentObject(activity)
         }
     }
 
