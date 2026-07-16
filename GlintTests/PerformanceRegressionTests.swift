@@ -130,6 +130,30 @@ final class PerformanceRegressionTests: XCTestCase {
         XCTAssertTrue(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: "always"))
     }
 
+    func testBackgroundWorkspaceNeverKeepsItsCurrentPaneFocused() {
+        XCTAssertTrue(TerminalFocusPolicy.isPaneFocused(
+            workspaceIsSelected: true,
+            paneIsFocused: true
+        ))
+        XCTAssertFalse(TerminalFocusPolicy.isPaneFocused(
+            workspaceIsSelected: false,
+            paneIsFocused: true
+        ))
+    }
+
+    func testBackgroundWorkspaceFirstResponderDoesNotPauseIdleClock() {
+        XCTAssertTrue(TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: true,
+            workspaceIsSelected: true,
+            viewIsFirstResponder: true
+        ))
+        XCTAssertFalse(TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: true,
+            workspaceIsSelected: false,
+            viewIsFirstResponder: true
+        ))
+    }
+
     func testTerminalOfflinePolicyRequiresOptInAndLiveSurface() {
         let now = Date(timeIntervalSinceReferenceDate: 1_000)
         let inactiveSince = now.addingTimeInterval(-600)

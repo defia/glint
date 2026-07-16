@@ -35,6 +35,19 @@ enum TerminalOfflinePolicy {
     }
 }
 
+enum TerminalFocusPolicy {
+    static func isPaneFocused(workspaceIsSelected: Bool,
+                              paneIsFocused: Bool) -> Bool {
+        workspaceIsSelected && paneIsFocused
+    }
+
+    static func protectsFromIdleOfflining(appIsActive: Bool,
+                                          workspaceIsSelected: Bool,
+                                          viewIsFirstResponder: Bool) -> Bool {
+        appIsActive && workspaceIsSelected && viewIsFirstResponder
+    }
+}
+
 // MARK: - Domain types
 
 enum SplitDirection: String, Codable, Hashable {
@@ -1623,8 +1636,11 @@ final class WorkspaceStore: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 let now = Date()
-                self.surfaceViews.values.forEach {
-                    $0.applicationDidBecomeActive(now: now)
+                for (key, view) in self.surfaceViews {
+                    view.applicationDidBecomeActive(
+                        now: now,
+                        workspaceIsSelected: key.workspace == self.selectedWorkspaceID
+                    )
                 }
                 if let id = self.selectedWorkspaceID {
                     self.acknowledgeCompletionIfNeeded(for: id)
@@ -1692,16 +1708,24 @@ final class WorkspaceStore: ObservableObject {
     }
 
     private func resetIdleTerminalTimeouts(now: Date = Date()) {
-        for view in surfaceViews.values {
-            view.resetIdleTimeout(now: now)
+        for (key, view) in surfaceViews {
+            view.resetIdleTimeout(
+                now: now,
+                workspaceIsSelected: key.workspace == selectedWorkspaceID
+            )
         }
     }
 
     private func offlineIdleTerminals(now: Date = Date()) {
         guard freeIdleTerminalsEnabled else { return }
         let timeout = TimeInterval(idleTerminalTimeoutSeconds)
-        for view in surfaceViews.values {
-            view.takeOfflineIfEligible(enabled: true, timeout: timeout, now: now)
+        for (key, view) in surfaceViews {
+            view.takeOfflineIfEligible(
+                enabled: true,
+                timeout: timeout,
+                now: now,
+                workspaceIsSelected: key.workspace == selectedWorkspaceID
+            )
         }
     }
 

@@ -807,8 +807,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     }
 
     /// Start a fresh grace period when the preference is enabled or changed.
-    func resetIdleTimeout(now: Date = Date()) {
-        if NSApp.isActive, window?.firstResponder === self {
+    func resetIdleTimeout(now: Date = Date(), workspaceIsSelected: Bool) {
+        if TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: NSApp.isActive,
+            workspaceIsSelected: workspaceIsSelected,
+            viewIsFirstResponder: window?.firstResponder === self
+        ) {
             inactiveSince = nil
         } else {
             inactiveSince = now
@@ -819,8 +823,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         noteInactive(now: now)
     }
 
-    func applicationDidBecomeActive(now: Date = Date()) {
-        if window?.firstResponder === self {
+    func applicationDidBecomeActive(now: Date = Date(), workspaceIsSelected: Bool) {
+        if TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: true,
+            workspaceIsSelected: workspaceIsSelected,
+            viewIsFirstResponder: window?.firstResponder === self
+        ) {
             _ = ensureLiveSurface()
             inactiveSince = nil
         } else {
@@ -831,8 +839,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     @discardableResult
     func takeOfflineIfEligible(enabled: Bool,
                                timeout: TimeInterval,
-                               now: Date = Date()) -> Bool {
-        refreshIdleClock(now: now)
+                               now: Date = Date(),
+                               workspaceIsSelected: Bool) -> Bool {
+        refreshIdleClock(now: now, workspaceIsSelected: workspaceIsSelected)
         guard let s = surface else { return false }
         let processName = foregroundProcessName()
         let hasUserOrJobState = TerminalOfflinePolicy.isIdleShell(processName)
@@ -909,8 +918,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         return count > 0
     }
 
-    private func refreshIdleClock(now: Date = Date()) {
-        if NSApp.isActive, window?.firstResponder === self {
+    private func refreshIdleClock(now: Date = Date(), workspaceIsSelected: Bool = true) {
+        if TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: NSApp.isActive,
+            workspaceIsSelected: workspaceIsSelected,
+            viewIsFirstResponder: window?.firstResponder === self
+        ) {
             inactiveSince = nil
         } else {
             noteInactive(now: now)
