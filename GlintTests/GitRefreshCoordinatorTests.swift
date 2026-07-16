@@ -21,7 +21,7 @@ final class GitRefreshCoordinatorTests: XCTestCase {
         let id = UUID()
         let ran = expectation(description: "immediate run")
 
-        coordinator.request(id) { ran.fulfill() }
+        coordinator.request(id, source: .commandFinished) { ran.fulfill() }
 
         // timeout < minInterval: a trailing path would still be pending here.
         wait(for: [ran], timeout: 0.15)
@@ -35,9 +35,9 @@ final class GitRefreshCoordinatorTests: XCTestCase {
         var count = 0
         let immediate = expectation(description: "immediate")
 
-        coordinator.request(id) { count += 1; immediate.fulfill() }
+        coordinator.request(id, source: .commandFinished) { count += 1; immediate.fulfill() }
         // The watcher follow-up within the window folds into one trailing run.
-        coordinator.request(id) { count += 1 }
+        coordinator.request(id, source: .fileWatcher) { count += 1 }
 
         wait(for: [immediate], timeout: 0.5)
         XCTAssertEqual(count, 1)
@@ -59,10 +59,10 @@ final class GitRefreshCoordinatorTests: XCTestCase {
         let id = UUID()
         var count = 0
 
-        coordinator.request(id) { count += 1 }
+        coordinator.request(id, source: .fileWatcher) { count += 1 }
         for offset in stride(from: 0.04, through: 0.52, by: 0.04) {
             DispatchQueue.main.asyncAfter(deadline: .now() + offset) {
-                coordinator.request(id) { count += 1 }
+                coordinator.request(id, source: .fileWatcher) { count += 1 }
             }
         }
 
@@ -76,6 +76,40 @@ final class GitRefreshCoordinatorTests: XCTestCase {
         wait(for: [settled], timeout: 1.5)
     }
 
+    /// Separate command completions are not evidence of filesystem churn, so
+    /// several quick commands must still refresh at the base interval.
+    func testRapidCommandCompletionsDoNotTriggerStormBackoff() {
+        let coordinator = GitRefreshCoordinator(minInterval: 0.2)
+        let id = UUID()
+        let immediate = expectation(description: "immediate")
+        let trailing = expectation(description: "base-interval trailing")
+
+        coordinator.request(id, source: .commandFinished) { immediate.fulfill() }
+        coordinator.request(id, source: .commandFinished) {}
+        coordinator.request(id, source: .commandFinished) { trailing.fulfill() }
+
+        wait(for: [immediate], timeout: 0.5)
+        // Storm backoff would postpone this until roughly 0.8 seconds.
+        wait(for: [trailing], timeout: 0.45)
+    }
+
+    /// A normal watcher follow-up between commands must not combine with the
+    /// commands to look like a filesystem storm.
+    func testCommandAndWatcherRequestsDoNotTriggerStormBackoff() {
+        let coordinator = GitRefreshCoordinator(minInterval: 0.2)
+        let id = UUID()
+        let immediate = expectation(description: "immediate")
+        let trailing = expectation(description: "base-interval trailing")
+
+        coordinator.request(id, source: .commandFinished) { immediate.fulfill() }
+        coordinator.request(id, source: .fileWatcher) {}
+        coordinator.request(id, source: .commandFinished) { trailing.fulfill() }
+
+        wait(for: [immediate], timeout: 0.5)
+        // Counting all three requests would postpone this to roughly 0.8 seconds.
+        wait(for: [trailing], timeout: 0.45)
+    }
+
     /// Once the window has fully elapsed, the next request is immediate again
     /// (the throttle resets) and spawns no extra trailing refresh.
     func testRequestAfterWindowRunsImmediatelyWithoutTrailing() {
@@ -84,13 +118,13 @@ final class GitRefreshCoordinatorTests: XCTestCase {
         var count = 0
         let first = expectation(description: "first")
 
-        coordinator.request(id) { count += 1; first.fulfill() }
+        coordinator.request(id, source: .commandFinished) { count += 1; first.fulfill() }
         wait(for: [first], timeout: 0.5)
 
         // Wait past the window so the next request is on the immediate path.
         let second = expectation(description: "second immediate")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-            coordinator.request(id) { count += 1; second.fulfill() }
+            coordinator.request(id, source: .commandFinished) { count += 1; second.fulfill() }
         }
         wait(for: [second], timeout: 1.0)
         XCTAssertEqual(count, 2)
@@ -111,12 +145,12 @@ final class GitRefreshCoordinatorTests: XCTestCase {
         var count = 0
         let immediate = expectation(description: "immediate")
 
-        coordinator.request(id) { count += 1; immediate.fulfill() }
+        coordinator.request(id, source: .commandFinished) { count += 1; immediate.fulfill() }
         wait(for: [immediate], timeout: 0.5)
         XCTAssertEqual(count, 1)
 
         // Second request schedules a trailing; cancel it before it fires.
-        coordinator.request(id) { count += 1 }
+        coordinator.request(id, source: .commandFinished) { count += 1 }
         coordinator.cancel(id)
 
         let settled = expectation(description: "trailing never fired")
@@ -133,8 +167,8 @@ final class GitRefreshCoordinatorTests: XCTestCase {
         let a = expectation(description: "a")
         let b = expectation(description: "b")
 
-        coordinator.request(UUID()) { a.fulfill() }
-        coordinator.request(UUID()) { b.fulfill() }
+        coordinator.request(UUID(), source: .commandFinished) { a.fulfill() }
+        coordinator.request(UUID(), source: .commandFinished) { b.fulfill() }
 
         // Two different workspaces → both immediate, neither blocks the other.
         wait(for: [a, b], timeout: 0.3)
