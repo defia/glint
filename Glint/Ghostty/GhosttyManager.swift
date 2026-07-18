@@ -66,7 +66,10 @@ final class GhosttyManager {
     }
 
     static func promptDetectionIsReliable(confirmCloseSurfaceTag tag: String?) -> Bool {
-        tag == "true" || tag == "always"
+        // "always" reports needsConfirmQuit == true unconditionally (fork
+        // Surface.zig `.always` branch), so it can never signal an idle
+        // prompt — only "true" actually exposes the OSC 133 cursor state.
+        tag == "true"
     }
 
     private init() {

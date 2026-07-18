@@ -129,7 +129,9 @@ final class PerformanceRegressionTests: XCTestCase {
         XCTAssertFalse(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: "false"))
         XCTAssertFalse(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: "unknown"))
         XCTAssertTrue(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: "true"))
-        XCTAssertTrue(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: "always"))
+        // "always" makes needsConfirmQuit unconditionally true — prompt
+        // state is unreadable, so the feature must treat it as unreliable.
+        XCTAssertFalse(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: "always"))
     }
 
     func testBackgroundWorkspaceNeverKeepsItsCurrentPaneFocused() {

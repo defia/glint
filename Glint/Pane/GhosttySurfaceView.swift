@@ -877,7 +877,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // not run on every 30s sweep for panes that can't qualify anyway.
         guard enabled, let s = surface,
               let idleStart = inactiveSince,
-              now.timeIntervalSince(idleStart) >= timeout else { return false }
+              now.timeIntervalSince(idleStart) >= timeout,
+              GhosttyManager.shared.canReliablyDetectIdlePrompt,
+              !ghostty_surface_needs_confirm_quit(s) else { return false }
         let processName = foregroundProcessName()
         let hasUserOrJobState = TerminalOfflinePolicy.isIdleShell(processName)
             ? !shellStateIsDisposable(s)
@@ -941,9 +943,15 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     private func promptHasUnsubmittedInput(_ s: ghostty_surface_t) -> Bool? {
         if typedSinceCommandEnd { return true }
         if hasMarkedText() || ghostty_surface_has_selection(s) { return true }
-        // selectCursorLine also fails when the cursor is scrolled out of the
-        // viewport — that must read as "unknown" (protected), not "no input".
-        guard ghostty_surface_select_cursor_line(s) else { return nil }
+        // selectCursorLine returns false for two cases the C API can't
+        // distinguish: the cursor scrolled out of the viewport (must stay
+        // protected) and an input segment that trims to whitespace — which
+        // includes the EMPTY prompt, the primary release scenario. The grid
+        // export's cursor flag (mode-visible AND in-viewport) tells them
+        // apart; a hidden/off-screen cursor errs toward protection.
+        guard ghostty_surface_select_cursor_line(s) else {
+            return cursorIsInViewport(s) ? false : nil
+        }
         defer { _ = ghostty_surface_clear_selection(s) }
 
         var text = ghostty_text_s()
@@ -956,6 +964,25 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// pastes, control-socket injections. See `typedSinceCommandEnd`.
     fileprivate func noteUserInputForIdleTracking() {
         typedSinceCommandEnd = true
+    }
+
+    /// The grid export's cursor `visible` flag is mode-visible AND
+    /// in-viewport, which is exactly the disambiguation
+    /// `promptHasUnsubmittedInput` needs. 0 scrollback lines keeps the
+    /// export to the viewport; this only runs for panes already past their
+    /// idle timeout.
+    private struct RenderGridCursorProbe: Decodable {
+        struct Cursor: Decodable { let visible: Bool }
+        let cursor: Cursor
+    }
+
+    private func cursorIsInViewport(_ s: ghostty_surface_t) -> Bool {
+        let json = ghostty_surface_render_grid_json(s, "", 0, 0, 0)
+        defer { ghostty_string_free(json) }
+        guard let ptr = json.ptr, json.len > 0 else { return false }
+        let data = Data(bytes: ptr, count: Int(json.len))
+        let probe = try? JSONDecoder().decode(RenderGridCursorProbe.self, from: data)
+        return probe?.cursor.visible ?? false
     }
 
     /// OSC 133 command end: the shell consumed whatever was typed.
@@ -1896,6 +1923,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // Quoting preserves filenames intact, but a filename can legally embed
         // a newline — gate on the actual injected string, same as paste.
         guard confirmUnsafeTextInjection(joined) else { return false }
+        noteUserInputForIdleTracking()
         joined.withCString { ptr in
             ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
         }
@@ -2140,6 +2168,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// to avoid the keycode→preedit "marked text" path. Main thread only.
     func injectKey(_ key: InjectableKey) {
         guard let s = surface else { return }
+        noteUserInputForIdleTracking()
         switch key {
         case .special(let kc):
             var k = ghostty_input_key_s()
@@ -2233,6 +2262,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         guard let pngData = imagePNGData(from: pb) else { return false }
         guard let path = persistPastedImage(pngData) else { return false }
         let quoted = posixShellQuoted(path)
+        noteUserInputForIdleTracking()
         quoted.withCString { ptr in
             ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
         }
