@@ -25,14 +25,111 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertTrue(payload.hasSuffix("first\r\nsecond"))
     }
 
+    func testSnapshotRestoresGhosttyTerminalStateAfterPaintingGrid() throws {
+        let json = Data(#"""
+        {
+          "columns": 80,
+          "rows": 24,
+          "cursor": {"row": 5, "column": 7, "visible": false, "style": "bar", "blinking": true},
+          "styles": [{
+            "id": 0,
+            "foreground": "#FFFFFF",
+            "background": "#000000",
+            "bold": false,
+            "faint": false,
+            "italic": false,
+            "underline": false,
+            "blink": false,
+            "inverse": false,
+            "invisible": false,
+            "strikethrough": false,
+            "overline": false
+          }],
+          "row_spans": [{"row": 0, "column": 0, "style_id": 0, "cell_width": 1, "text": "X"}],
+          "row_wraps": [false],
+          "active_screen": "alternate",
+          "modes": [
+            {"code": 1, "ansi": false, "on": true},
+            {"code": 6, "ansi": false, "on": true},
+            {"code": 2004, "ansi": false, "on": true}
+          ],
+          "scrolling_region": {"top": 2, "bottom": 20, "left": 3, "right": 70},
+          "pty_output_seq": 41,
+          "pty_stream_safe": true,
+          "scrollback_rows": 0,
+          "scrollback_row_wraps": [],
+          "scrollback_spans": []
+        }
+        """#.utf8)
+
+        let snapshot = try XCTUnwrap(
+            GhosttySurfaceView.webRemoteSnapshot(fromRenderGrid: json, maxLines: 1000)
+        )
+        XCTAssertEqual(snapshot.outputSequence, 41)
+        let text = String(decoding: snapshot.payload, as: UTF8.self)
+        let paint = try XCTUnwrap(text.range(of: "X")?.lowerBound)
+        let alternate = try XCTUnwrap(text.range(of: "\u{1b}[?1049h")?.lowerBound)
+        let applicationCursor = try XCTUnwrap(text.range(of: "\u{1b}[?1h")?.lowerBound)
+        let bracketedPaste = try XCTUnwrap(text.range(of: "\u{1b}[?2004h")?.lowerBound)
+        let scrollingRegion = try XCTUnwrap(text.range(of: "\u{1b}[3;21r")?.lowerBound)
+        let horizontalMargins = try XCTUnwrap(text.range(of: "\u{1b}[4;71s")?.lowerBound)
+        let cursor = try XCTUnwrap(text.range(of: "\u{1b}[4;5H")?.lowerBound)
+
+        XCTAssertLessThan(alternate, paint)
+        XCTAssertLessThan(paint, applicationCursor)
+        XCTAssertLessThan(applicationCursor, bracketedPaste)
+        XCTAssertLessThan(bracketedPaste, scrollingRegion)
+        XCTAssertLessThan(scrollingRegion, horizontalMargins)
+        XCTAssertLessThan(horizontalMargins, cursor)
+        XCTAssertTrue(text.hasSuffix("\u{1b}[5 q\u{1b}[?25l"))
+    }
+
+    func testSnapshotRejectsUnsafePTYParserBoundary() {
+        let json = Data(#"""
+        {
+          "styles": [],
+          "row_spans": [],
+          "scrollback_spans": [],
+          "scrollback_rows": 0,
+          "rows": 24,
+          "pty_output_seq": 41,
+          "pty_stream_safe": false
+        }
+        """#.utf8)
+
+        XCTAssertNil(GhosttySurfaceView.webRemoteSnapshot(fromRenderGrid: json, maxLines: 1000))
+    }
+
     func testTerminalOutputBufferCoalescesBytesAndRejectsOverflow() {
         var buffer = WebRemoteOutputBuffer(byteLimit: 4)
 
-        XCTAssertTrue(buffer.append(Data("ab".utf8)))
-        XCTAssertTrue(buffer.append(Data("cd".utf8)))
-        XCTAssertFalse(buffer.append(Data("e".utf8)))
-        XCTAssertEqual(buffer.take(), Data("abcd".utf8))
+        XCTAssertTrue(buffer.append(Data("ab".utf8), sequence: 1))
+        XCTAssertTrue(buffer.append(Data("cd".utf8), sequence: 2))
+        XCTAssertFalse(buffer.append(Data("e".utf8), sequence: 3))
+        XCTAssertEqual(buffer.take(after: 0), Data("abcd".utf8))
         XCTAssertTrue(buffer.isEmpty)
+    }
+
+    func testTerminalOutputBufferDropsChunksAlreadyIncludedInSnapshot() {
+        var buffer = WebRemoteOutputBuffer(byteLimit: 32)
+
+        XCTAssertTrue(buffer.append(Data("before".utf8), sequence: 40))
+        XCTAssertTrue(buffer.append(Data("included".utf8), sequence: 41))
+        XCTAssertTrue(buffer.append(Data("after".utf8), sequence: 42))
+
+        XCTAssertEqual(buffer.take(after: 41), Data("after".utf8))
+        XCTAssertTrue(buffer.isEmpty)
+    }
+
+    func testTerminalOutputBufferPreservesSequenceBoundariesWhenCoalescingBatches() {
+        var ingress = WebRemoteOutputBuffer(byteLimit: 32)
+        XCTAssertTrue(ingress.append(Data("included".utf8), sequence: 41))
+        XCTAssertTrue(ingress.append(Data("after".utf8), sequence: 42))
+
+        var pendingSelection = WebRemoteOutputBuffer(byteLimit: 32)
+        XCTAssertTrue(pendingSelection.append(contentsOf: ingress))
+
+        XCTAssertEqual(pendingSelection.take(after: 41), Data("after".utf8))
     }
 
     func testOutboundBufferKeepsSnapshotBeforeBufferedTerminalOutput() {

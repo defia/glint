@@ -12,8 +12,14 @@ enum WebRemoteStatus: Equatable {
 }
 
 struct WebRemoteOutputBuffer {
+    private struct Boundary {
+        let sequence: UInt64
+        let endOffset: Int
+    }
+
     let byteLimit: Int
     private(set) var data = Data()
+    private var boundaries: [Boundary] = []
 
     var isEmpty: Bool { data.isEmpty }
 
@@ -22,21 +28,47 @@ struct WebRemoteOutputBuffer {
         self.byteLimit = byteLimit
     }
 
-    mutating func append(_ chunk: Data) -> Bool {
+    mutating func append(_ chunk: Data, sequence: UInt64) -> Bool {
         guard chunk.count <= byteLimit - data.count else { return false }
         data.append(chunk)
+        boundaries.append(Boundary(sequence: sequence, endOffset: data.count))
         return true
     }
 
-    mutating func append(_ bytes: UnsafePointer<UInt8>, count: Int) -> Bool {
+    mutating func append(
+        _ bytes: UnsafePointer<UInt8>,
+        count: Int,
+        sequence: UInt64
+    ) -> Bool {
         guard count <= byteLimit - data.count else { return false }
         data.append(bytes, count: count)
+        boundaries.append(Boundary(sequence: sequence, endOffset: data.count))
         return true
     }
 
-    mutating func take() -> Data {
-        let result = data
-        data = Data()
+    mutating func append(contentsOf buffer: WebRemoteOutputBuffer) -> Bool {
+        guard buffer.data.count <= byteLimit - data.count else { return false }
+        let baseOffset = data.count
+        data.append(buffer.data)
+        boundaries.append(contentsOf: buffer.boundaries.map {
+            Boundary(sequence: $0.sequence, endOffset: baseOffset + $0.endOffset)
+        })
+        return true
+    }
+
+    mutating func take(after sequence: UInt64? = nil) -> Data {
+        let startOffset: Int
+        if let sequence,
+           let index = boundaries.firstIndex(where: { $0.sequence > sequence }) {
+            startOffset = index == boundaries.startIndex ? 0 : boundaries[index - 1].endOffset
+        } else if sequence == nil {
+            startOffset = 0
+        } else {
+            startOffset = data.endIndex
+        }
+        let result = data.subdata(in: startOffset ..< data.endIndex)
+        data.removeAll(keepingCapacity: true)
+        boundaries.removeAll(keepingCapacity: true)
         return result
     }
 }
@@ -184,7 +216,8 @@ final class WebRemoteServer: @unchecked Sendable {
     func forwardTerminalOutput(
         pane: String,
         bytes: UnsafePointer<UInt8>?,
-        count: UInt
+        count: UInt,
+        sequence: UInt64
     ) {
         guard let bytes, count > 0, let byteCount = Int(exactly: count) else { return }
         var shouldScheduleDrain = false
@@ -194,7 +227,7 @@ final class WebRemoteServer: @unchecked Sendable {
             if !overflowedTerminalOutput.contains(pane) {
                 var buffer = pendingTerminalOutput[pane]
                     ?? WebRemoteOutputBuffer(byteLimit: Self.maxIngressOutputBytes)
-                if buffer.append(bytes, count: byteCount) {
+                if buffer.append(bytes, count: byteCount, sequence: sequence) {
                     pendingTerminalOutput[pane] = buffer
                 } else {
                     pendingTerminalOutput.removeValue(forKey: pane)
@@ -217,7 +250,7 @@ final class WebRemoteServer: @unchecked Sendable {
 
     private func drainTerminalOutputLocked() {
         subscriptionLock.lock()
-        let batches = pendingTerminalOutput.mapValues { $0.data }
+        let batches = pendingTerminalOutput
         let overflowedPanes = overflowedTerminalOutput
         pendingTerminalOutput.removeAll(keepingCapacity: true)
         overflowedTerminalOutput.removeAll(keepingCapacity: true)
@@ -234,14 +267,14 @@ final class WebRemoteServer: @unchecked Sendable {
         overflowedClientIDs.forEach { dropSlowClientLocked($0) }
 
         var slowClientIDs = Set<UUID>()
-        for (pane, data) in batches {
+        for (pane, buffer) in batches {
             for client in clients.values where client.authenticated {
                 if client.pendingPane == pane {
-                    if !client.pendingSelectionOutput.append(data) {
+                    if !client.pendingSelectionOutput.append(contentsOf: buffer) {
                         slowClientIDs.insert(client.id)
                     }
                 } else if client.subscribedPane == pane,
-                          !client.sendTerminalOutput(data, pane: pane) {
+                          !client.sendTerminalOutput(buffer.data, pane: pane) {
                     slowClientIDs.insert(client.id)
                 }
             }
@@ -735,7 +768,9 @@ final class WebRemoteServer: @unchecked Sendable {
                 else { return }
                 switch result {
                 case let .success(snapshot):
-                    let bufferedOutput = client.pendingSelectionOutput.take()
+                    let bufferedOutput = client.pendingSelectionOutput.take(
+                        after: snapshot.outputSequence
+                    )
                     client.pendingPane = nil
                     client.subscribedPane = pane
                     recordTerminalSizeLocked(size, for: client)
@@ -743,7 +778,7 @@ final class WebRemoteServer: @unchecked Sendable {
                     sendJSON([
                         "type": "snapshot",
                         "pane": pane,
-                        "data": snapshot.base64EncodedString(),
+                        "data": snapshot.payload.base64EncodedString(),
                     ], to: clientID)
                     if !bufferedOutput.isEmpty,
                        !client.sendTerminalOutput(bufferedOutput, pane: pane) {

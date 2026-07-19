@@ -177,7 +177,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     deinit {
         if let s = surface {
-            ghostty_surface_set_pty_tee_cb(s, nil, nil)
+            ghostty_surface_set_pty_tee_v2_cb(s, nil, nil)
             ghostty_surface_free(s)
         }
     }
@@ -411,7 +411,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             return
         }
         self.surface = s
-        ghostty_surface_set_pty_tee_cb(
+        ghostty_surface_set_pty_tee_v2_cb(
             s,
             webRemotePTYTeeCallback,
             Unmanaged.passUnretained(self).toOpaque()
@@ -563,11 +563,36 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             let cell_width: Int
             let text: String
         }
+        struct Cursor: Decodable {
+            let row: Int
+            let column: Int
+            let visible: Bool
+            let style: String
+            let blinking: Bool
+        }
+        struct Mode: Decodable {
+            let code: Int
+            let ansi: Bool
+            let on: Bool
+        }
+        struct ScrollingRegion: Decodable {
+            let top: Int
+            let bottom: Int
+            let left: Int
+            let right: Int
+        }
+        let columns: Int?
         let styles: [Style]
         let row_spans: [Span]
         let scrollback_spans: [Span]
         let scrollback_rows: Int
         let rows: Int
+        let cursor: Cursor?
+        let active_screen: String?
+        let modes: [Mode]?
+        let scrolling_region: ScrollingRegion?
+        let pty_output_seq: UInt64?
+        let pty_stream_safe: Bool?
         // Per-row soft-wrap flags (true = row continues into the next). Optional
         // so snapshots written before this field still decode.
         let row_wraps: [Bool]?
@@ -747,6 +772,51 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         return text.isEmpty ? nil : text
     }
 
+    static func webRemoteSnapshotPayload(fromRenderGrid data: Data, maxLines: Int) -> Data? {
+        guard let grid = try? JSONDecoder().decode(RenderGrid.self, from: data) else { return nil }
+        let ansi = reconstructANSI(fromRenderGrid: data, maxLines: maxLines)
+        guard let columns = grid.columns,
+              let cursor = grid.cursor,
+              let activeScreen = grid.active_screen.flatMap(WebRemoteTerminalState.Screen.init(rawValue:)),
+              let modes = grid.modes
+        else { return WebRemoteSnapshotPayload.make(ansi: ansi) }
+
+        let scrollingRegion = grid.scrolling_region.map {
+            WebRemoteTerminalState.ScrollingRegion(
+                top: $0.top,
+                bottom: $0.bottom,
+                left: $0.left,
+                right: $0.right
+            )
+        }
+        let state = WebRemoteTerminalState(
+            columns: columns,
+            rows: grid.rows,
+            activeScreen: activeScreen,
+            modes: modes.map {
+                WebRemoteTerminalState.Mode(code: $0.code, ansi: $0.ansi, on: $0.on)
+            },
+            scrollingRegion: scrollingRegion,
+            cursor: WebRemoteTerminalState.Cursor(
+                row: cursor.row,
+                column: cursor.column,
+                visible: cursor.visible,
+                style: WebRemoteTerminalState.Cursor.Style(rawValue: cursor.style) ?? .block,
+                blinking: cursor.blinking
+            )
+        )
+        return WebRemoteSnapshotPayload.make(ansi: ansi, state: state)
+    }
+
+    static func webRemoteSnapshot(fromRenderGrid data: Data, maxLines: Int) -> WebRemoteTerminalSnapshot? {
+        guard let grid = try? JSONDecoder().decode(RenderGrid.self, from: data),
+              grid.pty_stream_safe == true,
+              let outputSequence = grid.pty_output_seq,
+              let payload = webRemoteSnapshotPayload(fromRenderGrid: data, maxLines: maxLines)
+        else { return nil }
+        return WebRemoteTerminalSnapshot(payload: payload, outputSequence: outputSequence)
+    }
+
     // MARK: - surface creation failure UI
 
     /// Centered "Terminal failed to start" + Retry, shown when ghostty
@@ -919,7 +989,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             ScrollbackArchive.drain()
         }
 
-        ghostty_surface_set_pty_tee_cb(s, nil, nil)
+        ghostty_surface_set_pty_tee_v2_cb(s, nil, nil)
         surface = nil
         ghostty_surface_free(s)
         pendingVisibleRedraw = false
@@ -2223,21 +2293,27 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         markScrollbackDirty()
     }
 
-    func webRemoteSnapshot(maxLines: Int = 1000) -> Data? {
+    func webRemoteSnapshot(maxLines: Int = 1000) -> WebRemoteTerminalSnapshot? {
         guard let s = surface else { return nil }
         let json = ghostty_surface_render_grid_json(s, "", 0, 0, UInt(maxLines))
         defer { ghostty_string_free(json) }
         guard let pointer = json.ptr, json.len > 0 else { return nil }
         let grid = Data(bytes: pointer, count: Int(json.len))
-        guard let ansi = Self.reconstructANSI(fromRenderGrid: grid, maxLines: maxLines) else {
-            return WebRemoteSnapshotPayload.make(ansi: nil)
-        }
-        return WebRemoteSnapshotPayload.make(ansi: ansi)
+        return Self.webRemoteSnapshot(fromRenderGrid: grid, maxLines: maxLines)
     }
 
-    fileprivate func forwardWebRemoteOutput(_ bytes: UnsafePointer<UInt8>?, count: UInt) {
+    fileprivate func forwardWebRemoteOutput(
+        _ bytes: UnsafePointer<UInt8>?,
+        count: UInt,
+        sequence: UInt64
+    ) {
         guard let paneKey else { return }
-        WebRemoteServer.shared.forwardTerminalOutput(pane: paneKey, bytes: bytes, count: count)
+        WebRemoteServer.shared.forwardTerminalOutput(
+            pane: paneKey,
+            bytes: bytes,
+            count: count,
+            sequence: sequence
+        )
     }
 
     /// Inject a single whitelisted key. Special keys go through
@@ -2581,12 +2657,13 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 private let webRemotePTYTeeCallback: @convention(c) (
     UnsafeMutableRawPointer?,
     UnsafePointer<CChar>?,
-    UInt
-) -> Void = { userData, bytes, count in
+    UInt,
+    UInt64
+) -> Void = { userData, bytes, count, sequence in
     guard let userData, let bytes else { return }
     let view = Unmanaged<GhosttySurfaceView>.fromOpaque(userData).takeUnretainedValue()
     let unsigned = UnsafeRawPointer(bytes).assumingMemoryBound(to: UInt8.self)
-    view.forwardWebRemoteOutput(unsigned, count: count)
+    view.forwardWebRemoteOutput(unsigned, count: count, sequence: sequence)
 }
 
 // MARK: - Terminal scrollback restore (colored snapshot via render_grid_json)

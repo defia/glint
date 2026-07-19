@@ -3,8 +3,13 @@ import Foundation
 import Security
 
 enum WebRemoteTerminalSnapshotResult {
-    case success(Data)
+    case success(WebRemoteTerminalSnapshot)
     case failure(String)
+}
+
+struct WebRemoteTerminalSnapshot {
+    let payload: Data
+    let outputSequence: UInt64
 }
 
 enum WebRemoteOpenProjectResult {
@@ -43,10 +48,96 @@ struct WebRemoteTerminalSize: Equatable {
 enum WebRemoteSnapshotPayload {
     private static let resetScreen = "\u{1b}[0m\u{1b}[2J\u{1b}[H"
 
-    static func make(ansi: String?) -> Data {
+    static func make(ansi: String?, state: WebRemoteTerminalState? = nil) -> Data {
         let terminalANSI = ansi?.replacingOccurrences(of: "\n", with: "\r\n") ?? ""
-        return Data((resetScreen + terminalANSI).utf8)
+        guard let state else { return Data((resetScreen + terminalANSI).utf8) }
+
+        var payload = state.activeScreen == .alternate ? "\u{1b}[?1049h" : ""
+        payload += resetScreen
+        payload += terminalANSI
+
+        for mode in state.modes where mode.code > 0 {
+            payload += "\u{1b}["
+            if !mode.ansi { payload += "?" }
+            payload += "\(mode.code)\(mode.on ? "h" : "l")"
+        }
+
+        let region = state.scrollingRegion
+        if let region, region.isValid(columns: state.columns, rows: state.rows) {
+            if region.top != 0 || region.bottom != state.rows - 1 {
+                payload += "\u{1b}[\(region.top + 1);\(region.bottom + 1)r"
+            }
+            if region.left != 0 || region.right != state.columns - 1 {
+                payload += "\u{1b}[\(region.left + 1);\(region.right + 1)s"
+            }
+        }
+
+        let originMode = state.modes.contains { !$0.ansi && $0.code == 6 && $0.on }
+        let cursorRow = originMode ? state.cursor.row - (region?.top ?? 0) : state.cursor.row
+        let cursorColumn = originMode ? state.cursor.column - (region?.left ?? 0) : state.cursor.column
+        payload += "\u{1b}[\(max(cursorRow, 0) + 1);\(max(cursorColumn, 0) + 1)H"
+        payload += state.cursor.style.sequence(blinking: state.cursor.blinking)
+        payload += state.cursor.visible ? "\u{1b}[?25h" : "\u{1b}[?25l"
+        return Data(payload.utf8)
     }
+}
+
+struct WebRemoteTerminalState: Equatable {
+    enum Screen: String {
+        case primary
+        case alternate
+    }
+
+    struct Mode: Equatable {
+        let code: Int
+        let ansi: Bool
+        let on: Bool
+    }
+
+    struct ScrollingRegion: Equatable {
+        let top: Int
+        let bottom: Int
+        let left: Int
+        let right: Int
+
+        func isValid(columns: Int, rows: Int) -> Bool {
+            columns > 0 && rows > 0
+                && top >= 0 && top <= bottom && bottom < rows
+                && left >= 0 && left <= right && right < columns
+        }
+    }
+
+    struct Cursor: Equatable {
+        enum Style: String {
+            case bar
+            case block
+            case underline
+            case blockHollow = "block_hollow"
+
+            func sequence(blinking: Bool) -> String {
+                let code: Int
+                switch self {
+                case .block, .blockHollow: code = blinking ? 1 : 2
+                case .underline: code = blinking ? 3 : 4
+                case .bar: code = blinking ? 5 : 6
+                }
+                return "\u{1b}[\(code) q"
+            }
+        }
+
+        let row: Int
+        let column: Int
+        let visible: Bool
+        let style: Style
+        let blinking: Bool
+    }
+
+    let columns: Int
+    let rows: Int
+    let activeScreen: Screen
+    let modes: [Mode]
+    let scrollingRegion: ScrollingRegion?
+    let cursor: Cursor
 }
 
 enum WebRemoteProjectPath {
