@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 @testable import Glint
 
@@ -184,6 +185,18 @@ final class WebRemoteProtocolTests: XCTestCase {
 
         XCTAssertEqual(WebRemoteAccessURL.token(from: value), "abc123")
         XCTAssertNil(WebRemoteAccessURL.token(from: "http://192.168.1.20:43871/"))
+    }
+
+    func testRedactedURLStripsTokenFragmentForSafeCopying() {
+        XCTAssertEqual(
+            WebRemoteAccessURL.redacted(from: "http://192.168.1.20:43871/#token=abc123"),
+            "http://192.168.1.20:43871/"
+        )
+        // A URL without a token fragment is returned unchanged.
+        XCTAssertEqual(
+            WebRemoteAccessURL.redacted(from: "http://192.168.1.20:43871/"),
+            "http://192.168.1.20:43871/"
+        )
     }
 
     func testHTTPRequestParsesGetAndStripsQuery() {
