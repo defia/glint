@@ -416,15 +416,8 @@ final class WebRemoteServer: @unchecked Sendable {
     }
 
     private func resetAccessKeyLocked() {
-        let controlledPanes = controlledPanesLocked()
-        token = WebRemoteAccessKeyStore.reset()
-        clients.values.forEach { $0.cancel() }
-        clients.removeAll()
-        updateSubscribedPanesLocked()
-        releaseTerminalSizes(controlledPanes)
-        if runID != nil, readyListeners.count == 2 {
-            emit(.ready(urls: accessURLsLocked()))
-        }
+        WebRemoteAccessKeyStore.reset()
+        startLocked()
     }
 
     private func accessURLsLocked() -> [String] {

@@ -1762,6 +1762,7 @@ final class WorkspaceStore: ObservableObject {
         WebRemoteServer.shared.setStatusHandler { [weak self] status in
             self?.webRemoteStatus = status
         }
+        WebRemoteServer.shared.setListenInterface(webRemoteListenInterface)
         if webRemoteEnabled { WebRemoteServer.shared.start() }
         else { WebRemoteServer.shared.stop() }
         Self.autoInstallAgentHooksOnFirstLaunch(socketPath: AgentBridge.shared.socketPath)

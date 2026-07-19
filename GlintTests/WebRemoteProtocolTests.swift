@@ -323,10 +323,7 @@ final class WebRemoteProtocolTests: XCTestCase {
     }
 
     func testTokenKeyDecodesHexAndRejectsAnythingElse() {
-        XCTAssertEqual(
-            hexString(WebRemoteCrypto.tokenKey(from: "0011ff") ?? Data()),
-            "0011ff"
-        )
+        XCTAssertNil(WebRemoteCrypto.tokenKey(from: "0011ff"))
         // Exactly 64 lowercase hex chars → 32 bytes.
         let full = String(repeating: "ab", count: 32)
         XCTAssertEqual(WebRemoteCrypto.tokenKey(from: full)?.count, 32)
