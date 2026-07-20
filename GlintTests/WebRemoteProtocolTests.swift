@@ -199,6 +199,16 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertEqual(WebRemotePortStore.loadOrCreate(defaults: defaults), reset)
     }
 
+    func testEveryAppIconPresetProvidesAWebRemotePNG() throws {
+        for preset in AppIconPreset.allCases {
+            let value = try XCTUnwrap(WebRemoteBrandIcon.dataURL(for: preset), preset.rawValue)
+            XCTAssertTrue(value.hasPrefix("data:image/png;base64,"), preset.rawValue)
+            let encoded = String(value.dropFirst("data:image/png;base64,".count))
+            let png = try XCTUnwrap(Data(base64Encoded: encoded), preset.rawValue)
+            XCTAssertEqual(Array(png.prefix(8)), [137, 80, 78, 71, 13, 10, 26, 10], preset.rawValue)
+        }
+    }
+
     func testAccessKeyCanBeCopiedSeparatelyFromSessionURL() {
         let value = "http://192.168.1.20:43871/#token=abc123"
 

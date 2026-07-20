@@ -15,7 +15,10 @@
         <button id="sidebar-toggle" class="mobile-sidebar-button" type="button"
                 aria-controls="sidebar" aria-expanded="false" aria-label="打开项目与终端"
                 data-i18n-aria="open_sidebar">☰</button>
-        <span class="brand-mark">G</span>
+        <span class="brand-mark" aria-hidden="true">
+          <span id="brand-fallback">G</span>
+          <img id="brand-icon" alt="" hidden>
+        </span>
         <div>
           <strong>Glint Remote</strong>
           <span id="active-label" data-i18n="select_terminal">选择一个终端</span>

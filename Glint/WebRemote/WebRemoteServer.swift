@@ -208,7 +208,7 @@ final class WebRemoteServer: @unchecked Sendable {
         }
     }
 
-    func refreshTheme() {
+    func refreshAppearance() {
         queue.async { [weak self] in
             guard let self else { return }
             clients.values
@@ -771,6 +771,9 @@ final class WebRemoteServer: @unchecked Sendable {
                 "workspaces": store.webRemoteWorkspacePayload(),
                 "theme": store.webRemoteThemePayload(),
             ]
+            if let brand = store.webRemoteBrandPayload() {
+                message["brand"] = brand
+            }
             if let selected = store.selectedWorkspaceID {
                 message["selectedWorkspace"] = selected.uuidString
             }

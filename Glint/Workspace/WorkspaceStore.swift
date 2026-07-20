@@ -938,7 +938,7 @@ final class WorkspaceStore: ObservableObject {
         didSet {
             UserDefaults.standard.set(accentName, forKey: "glint.accentName")
             GhosttyManager.shared.reloadConfig()
-            WebRemoteServer.shared.refreshTheme()
+            WebRemoteServer.shared.refreshAppearance()
         }
     }
 
@@ -953,7 +953,7 @@ final class WorkspaceStore: ObservableObject {
             GhosttyManager.shared.reloadConfig()
             GhosttyManager.shared.syncWindowAppearance()   // 浅/暗主题 → 玻璃材质跟随
             themeRevision &+= 1
-            WebRemoteServer.shared.refreshTheme()
+            WebRemoteServer.shared.refreshAppearance()
         }
     }
 
@@ -970,7 +970,7 @@ final class WorkspaceStore: ObservableObject {
         GhosttyManager.shared.reloadConfig()
         GhosttyManager.shared.syncWindowAppearance()
         themeRevision &+= 1
-        WebRemoteServer.shared.refreshTheme()
+        WebRemoteServer.shared.refreshAppearance()
     }
 
     // MARK: 透明度与模糊
@@ -1025,6 +1025,7 @@ final class WorkspaceStore: ObservableObject {
         didSet {
             UserDefaults.standard.set(appIconPreset.rawValue, forKey: "glint.appIconPreset")
             applyAppIcon()
+            WebRemoteServer.shared.refreshAppearance()
         }
     }
 
@@ -2840,6 +2841,14 @@ final class WorkspaceStore: ObservableObject {
         ]
     }
 
+    func webRemoteBrandPayload() -> [String: Any]? {
+        guard let dataURL = WebRemoteBrandIcon.dataURL(for: appIconPreset) else { return nil }
+        return [
+            "preset": appIconPreset.rawValue,
+            "dataURL": dataURL,
+        ]
+    }
+
     func webRemoteTerminalSnapshot(pane: String) -> WebRemoteTerminalSnapshotResult {
         guard let key = Self.parsePaneKey(pane) else { return .failure("bad-request") }
         guard paneExists(key) else { return .failure("unknown-pane") }
@@ -4147,6 +4156,17 @@ enum AppIconPreset: String, CaseIterable, Identifiable {
         case .ember: return "余烬"
         case .graphite: return "石墨"
         }
+    }
+}
+
+enum WebRemoteBrandIcon {
+    static func dataURL(for preset: AppIconPreset) -> String? {
+        guard let image = NSImage(named: preset.headerLogoAsset),
+              let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:])
+        else { return nil }
+        return "data:image/png;base64,\(png.base64EncodedString())"
     }
 }
 

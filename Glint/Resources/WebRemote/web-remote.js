@@ -180,6 +180,8 @@ const elements = {
   authDialog: document.querySelector("#auth-dialog"),
   authError: document.querySelector("#auth-error"),
   authForm: document.querySelector("#auth-form"),
+  brandFallback: document.querySelector("#brand-fallback"),
+  brandIcon: document.querySelector("#brand-icon"),
   createClose: document.querySelector("#create-close"),
   createDialog: document.querySelector("#create-dialog"),
   createForm: document.querySelector("#create-form"),
@@ -269,6 +271,7 @@ const paneRetryLimit = 40;
 let controllingPane = "";
 let resizeTimer;
 let lastSentTerminalSize = "";
+let appliedBrandSignature = "";
 let appliedThemeSignature = "";
 const mobileSidebarLayout = matchMedia(
   "(max-width: 760px), (max-width: 900px) and (max-height: 520px) and (orientation: landscape)"
@@ -436,6 +439,7 @@ function handleMessage(raw) {
       break;
     case "state":
       lastState = message;
+      applyBrand(message.brand);
       applyTheme(message.theme);
       renderState(message);
       chooseInitialPane(message);
@@ -497,6 +501,17 @@ function handleMessage(raw) {
       handleError(message.code);
       break;
   }
+}
+
+function applyBrand(brand) {
+  if (!brand || typeof brand.preset !== "string" ||
+      typeof brand.dataURL !== "string" ||
+      !brand.dataURL.startsWith("data:image/png;base64,")) return;
+  if (brand.preset === appliedBrandSignature) return;
+  appliedBrandSignature = brand.preset;
+  elements.brandIcon.src = brand.dataURL;
+  elements.brandIcon.hidden = false;
+  elements.brandFallback.hidden = true;
 }
 
 function applyTheme(theme) {
