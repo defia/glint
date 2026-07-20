@@ -180,6 +180,25 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertEqual(WebRemoteAccessKeyStore.loadOrCreate(defaults: defaults), reset)
     }
 
+    func testWebRemotePortPersistsUntilExplicitReset() {
+        let suite = "WebRemotePortStoreTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            return XCTFail("Could not create isolated defaults")
+        }
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let initial = WebRemotePortStore.loadOrCreate(defaults: defaults)
+        XCTAssertEqual(initial.http, 43871)
+        XCTAssertEqual(initial.webSocket, 43872)
+        XCTAssertEqual(WebRemotePortStore.loadOrCreate(defaults: defaults), initial)
+
+        let reset = WebRemotePortStore.reset(defaults: defaults, randomPort: { 52000 })
+        XCTAssertEqual(reset.http, 52000)
+        XCTAssertEqual(reset.webSocket, 52001)
+        XCTAssertNotEqual(reset, initial)
+        XCTAssertEqual(WebRemotePortStore.loadOrCreate(defaults: defaults), reset)
+    }
+
     func testAccessKeyCanBeCopiedSeparatelyFromSessionURL() {
         let value = "http://192.168.1.20:43871/#token=abc123"
 

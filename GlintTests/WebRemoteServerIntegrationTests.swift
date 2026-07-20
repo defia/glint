@@ -7,29 +7,35 @@ import XCTest
 /// and HEAD handling) and the WebSocket authentication flow (including the
 /// exponential backoff that throttles online token guessing).
 ///
-/// These tests bind the project's real ports (43871 HTTP / 43872 WS) on
+/// These tests bind the project's persisted HTTP/WebSocket port pair on
 /// 127.0.0.1, so they will conflict with a concurrently running Glint whose web
 /// remote is enabled. The server is started fresh in `setUp` and stopped in
 /// `tearDown`; test methods run serially within the class.
 final class WebRemoteServerIntegrationTests: XCTestCase {
-    private static let httpOrigin = "http://127.0.0.1:43871"
-    private static let webSocketURL = URL(string: "ws://127.0.0.1:43872/control")!
-
     private var urlSession: URLSession!
     private var readyToken: String?
+    private var httpOrigin: String?
+    private var webSocketURL: URL?
 
     override func setUp() async throws {
         try await super.setUp()
         urlSession = URLSession(configuration: .ephemeral)
         readyToken = nil
+        httpOrigin = nil
+        webSocketURL = nil
 
         let ready = expectation(description: "WebRemoteServer reports .ready")
         WebRemoteServer.shared.setStatusHandler { [weak self] status in
             guard case let .ready(urls) = status,
                   let url = urls.first,
-                  let token = WebRemoteAccessURL.token(from: url)
+                  let token = WebRemoteAccessURL.token(from: url),
+                  let components = URLComponents(string: url),
+                  let host = components.host,
+                  let httpPort = components.port
             else { return }
             self?.readyToken = token
+            self?.httpOrigin = "http://\(host):\(httpPort)"
+            self?.webSocketURL = URL(string: "ws://\(host):\(httpPort + 1)/control")
             ready.fulfill()
         }
         // Bind to loopback only — never touch a real NIC from tests.
@@ -37,6 +43,8 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
         WebRemoteServer.shared.start()
         try await fulfillment(of: [ready], timeout: 10)
         XCTAssertNotNil(readyToken, "Server should expose an access token in its ready URL")
+        XCTAssertNotNil(httpOrigin)
+        XCTAssertNotNil(webSocketURL)
     }
 
     override func tearDown() async throws {
@@ -185,7 +193,8 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
     // MARK: - Helpers
 
     private func request(_ path: String, method: String = "GET") async throws -> (Data, HTTPURLResponse) {
-        var req = URLRequest(url: URL(string: Self.httpOrigin + path)!)
+        let origin = try XCTUnwrap(httpOrigin)
+        var req = URLRequest(url: try XCTUnwrap(URL(string: origin + path)))
         req.httpMethod = method
         req.timeoutInterval = 5
         let (data, response) = try await urlSession.data(for: req)
@@ -193,7 +202,7 @@ final class WebRemoteServerIntegrationTests: XCTestCase {
     }
 
     private func makeWebSocket() -> URLSessionWebSocketTask {
-        let task = urlSession.webSocketTask(with: Self.webSocketURL)
+        let task = urlSession.webSocketTask(with: webSocketURL!)
         task.resume()
         return task
     }

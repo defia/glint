@@ -9,6 +9,7 @@ enum WebRemoteStatus: Equatable {
     case stopped
     case starting
     case ready(urls: [String])
+    case portConflict(port: UInt16)
     case failed(message: String)
 }
 
@@ -128,8 +129,6 @@ struct WebRemoteOutboundBuffer {
 
 final class WebRemoteServer: @unchecked Sendable {
     static let shared = WebRemoteServer()
-    static let httpPort: UInt16 = 43871
-    static let webSocketPort: UInt16 = 43872
 
     private static let maxIngressOutputBytes = 256 * 1024
     private static let maxSelectionOutputBytes = 512 * 1024
@@ -165,6 +164,7 @@ final class WebRemoteServer: @unchecked Sendable {
     /// Raw 32-byte key material decoded from `token`; empty until the server
     /// starts with a valid token. Drives the challenge-response handshake.
     private var tokenKey = Data()
+    private var ports = WebRemotePortStore.loadOrCreate()
     private var listenInterface = WebRemoteListenTarget.loopback
     private var lastBoundAddress: String?
     private var pathMonitor: NWPathMonitor?
@@ -193,9 +193,9 @@ final class WebRemoteServer: @unchecked Sendable {
         }
     }
 
-    func resetAccessKey() {
+    func resetCredentials() {
         queue.async { [weak self] in
-            self?.resetAccessKeyLocked()
+            self?.resetCredentialsLocked()
         }
     }
 
@@ -291,6 +291,7 @@ final class WebRemoteServer: @unchecked Sendable {
         emit(.starting)
         token = WebRemoteAccessKeyStore.loadOrCreate()
         tokenKey = WebRemoteCrypto.tokenKey(from: token) ?? Data()
+        ports = WebRemotePortStore.loadOrCreate()
         let currentRun = UUID()
         runID = currentRun
 
@@ -317,8 +318,8 @@ final class WebRemoteServer: @unchecked Sendable {
 
             let httpParameters = NWParameters.tcp
             httpParameters.allowLocalEndpointReuse = true
-            guard let httpPort = NWEndpoint.Port(rawValue: Self.httpPort),
-                  let webSocketPort = NWEndpoint.Port(rawValue: Self.webSocketPort)
+            guard let httpPort = NWEndpoint.Port(rawValue: ports.http),
+                  let webSocketPort = NWEndpoint.Port(rawValue: ports.webSocket)
             else {
                 failLocked("Invalid web remote port.")
                 return
@@ -404,19 +405,25 @@ final class WebRemoteServer: @unchecked Sendable {
             case .ready:
                 self.readyListeners.insert(kind)
                 if self.readyListeners.count == 2 {
-                    webRemoteLogger.info("Web remote listening on ports \(Self.httpPort) and \(Self.webSocketPort)")
+                    webRemoteLogger.info("Web remote listening on ports \(self.ports.http) and \(self.ports.webSocket)")
                     self.emit(.ready(urls: self.accessURLsLocked()))
                 }
             case let .failed(error):
-                self.failLocked(error.localizedDescription)
+                let port = kind == .http ? self.ports.http : self.ports.webSocket
+                if case .posix(.EADDRINUSE) = error {
+                    self.failLocked(status: .portConflict(port: port))
+                } else {
+                    self.failLocked(error.localizedDescription)
+                }
             default:
                 break
             }
         }
     }
 
-    private func resetAccessKeyLocked() {
+    private func resetCredentialsLocked() {
         WebRemoteAccessKeyStore.reset()
+        WebRemotePortStore.reset()
         startLocked()
     }
 
@@ -435,7 +442,7 @@ final class WebRemoteServer: @unchecked Sendable {
             let address = WebRemoteAddressResolver.currentIPv4(forInterface: listenInterface)
             hosts = [address ?? "127.0.0.1"]
         }
-        return hosts.map { "http://\($0):\(Self.httpPort)/#token=\(token)" }
+        return hosts.map { "http://\($0):\(ports.http)/#token=\(token)" }
     }
 
     private func stopLocked(emitStatus: Bool) {
@@ -463,6 +470,10 @@ final class WebRemoteServer: @unchecked Sendable {
     }
 
     private func failLocked(_ message: String) {
+        failLocked(status: .failed(message: message))
+    }
+
+    private func failLocked(status: WebRemoteStatus) {
         let controlledPanes = controlledPanesLocked()
         runID = nil
         httpListener?.cancel()
@@ -480,8 +491,8 @@ final class WebRemoteServer: @unchecked Sendable {
         lastBoundAddress = nil
         updateSubscribedPanesLocked()
         releaseTerminalSizes(controlledPanes)
-        webRemoteLogger.error("Web remote failed: \(message, privacy: .public)")
-        emit(.failed(message: message))
+        webRemoteLogger.error("Web remote failed: \(String(describing: status), privacy: .public)")
+        emit(status)
     }
 
     private func emit(_ status: WebRemoteStatus) {

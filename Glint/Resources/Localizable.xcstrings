@@ -487,6 +487,83 @@
         }
       }
     },
+    "Access key and ports reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "访问密钥和端口已重置"
+          }
+        }
+      }
+    },
+    "New ports: %d (web) and %d (terminal). Copy the new link and key to reconnect.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新端口：%d（网页）和 %d（终端）。请复制新链接和密钥重新连接。"
+          }
+        }
+      }
+    },
+    "Port %d is already in use.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端口 %d 已被占用。"
+          }
+        }
+      }
+    },
+    "Port %d is already in use. Resetting will generate a new key and ports, disconnect browsers, and invalidate old links.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端口 %d 已被占用。重置会生成新密钥和端口、断开浏览器，并使旧链接失效。"
+          }
+        }
+      }
+    },
+    "Port conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端口冲突"
+          }
+        }
+      }
+    },
+    "Web remote control unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页远程控制不可用"
+          }
+        }
+      }
+    },
+    "Web remote port conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页远程控制端口冲突"
+          }
+        }
+      }
+    },
     "Controlled from web": {
       "extractionState": "manual",
       "localizations": {
@@ -531,35 +608,35 @@
         }
       }
     },
-    "Reset access key?": {
+    "Reset access key and ports?": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "重置访问密钥？"
+            "value": "重置访问密钥和端口？"
           }
         }
       }
     },
-    "Reset key": {
+    "Reset key and ports": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "重置密钥"
+            "value": "重置密钥和端口"
           }
         }
       }
     },
-    "Connected browsers will be disconnected and must use the new key.": {
+    "Connected browsers will be disconnected. A new key and ports will be generated, so old links will stop working.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已连接的浏览器将断开，并需要使用新密钥重新连接。"
+            "value": "已连接的浏览器将断开。系统会生成新密钥和端口，旧链接将失效。"
           }
         }
       }

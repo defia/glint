@@ -361,6 +361,40 @@ enum WebRemoteAccessKeyStore {
     }
 }
 
+struct WebRemotePorts: Equatable {
+    let http: UInt16
+    var webSocket: UInt16 { http + 1 }
+}
+
+enum WebRemotePortStore {
+    private static let defaultsKey = "glint.webRemoteHTTPPort"
+    private static let defaultHTTPPort: UInt16 = 43871
+    private static let resetRange: ClosedRange<UInt16> = 49152 ... 65534
+
+    static func loadOrCreate(defaults: UserDefaults = .standard) -> WebRemotePorts {
+        let stored = defaults.integer(forKey: defaultsKey)
+        if let port = UInt16(exactly: stored), port >= 1024, port < UInt16.max {
+            return WebRemotePorts(http: port)
+        }
+        defaults.set(Int(defaultHTTPPort), forKey: defaultsKey)
+        return WebRemotePorts(http: defaultHTTPPort)
+    }
+
+    @discardableResult
+    static func reset(
+        defaults: UserDefaults = .standard,
+        randomPort: () -> UInt16 = { UInt16.random(in: resetRange) }
+    ) -> WebRemotePorts {
+        let current = loadOrCreate(defaults: defaults).http
+        let candidate = randomPort()
+        let next = candidate == current
+            ? (candidate == resetRange.upperBound ? resetRange.lowerBound : candidate + 1)
+            : candidate
+        defaults.set(Int(next), forKey: defaultsKey)
+        return WebRemotePorts(http: next)
+    }
+}
+
 enum WebRemoteAccessURL {
     static func token(from value: String) -> String? {
         guard let fragment = URLComponents(string: value)?.fragment else { return nil }

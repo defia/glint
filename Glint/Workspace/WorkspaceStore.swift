@@ -1168,8 +1168,8 @@ final class WorkspaceStore: ObservableObject {
         webRemoteAccessURLs.first.flatMap(WebRemoteAccessURL.token(from:))
     }
 
-    func resetWebRemoteAccessKey() {
-        WebRemoteServer.shared.resetAccessKey()
+    func resetWebRemoteCredentials() {
+        WebRemoteServer.shared.resetCredentials()
     }
 
     /// Whether the sidebar's "Archived" section is currently expanded.
