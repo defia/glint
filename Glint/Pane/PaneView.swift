@@ -59,9 +59,7 @@ struct PaneView: View {
                 focused: isFocused,
                 deferFocus: store.commandPaletteOpen || store.agentChooserIntent != nil,
                 isPaneVisible: {
-                    guard store.selectedWorkspaceID == workspaceID,
-                          let tab = store.selectedWorkspace?.selectedTab else { return false }
-                    return tab.root.leaves.contains(paneID)
+                    store.isPaneVisible(.init(workspace: workspaceID, pane: paneID))
                 }
             )
             if !isFocused {

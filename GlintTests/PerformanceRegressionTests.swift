@@ -158,6 +158,39 @@ final class PerformanceRegressionTests: XCTestCase {
         ))
     }
 
+    func testPaneVisibilityRequiresSelectedWorkspaceAndSelectedTab() {
+        let wsID = UUID()
+        let onSelectedTab = PaneID(value: 1)
+        let onOtherTab = PaneID(value: 2)
+        let ws = Workspace(
+            id: wsID, name: "repo", userNamed: false,
+            accentHex: "5E5CE6", symbol: "terminal",
+            tabs: [
+                WorkspaceTab(id: TabID(value: 0), name: nil,
+                             root: .leaf(onSelectedTab), focusedPane: onSelectedTab),
+                WorkspaceTab(id: TabID(value: 1), name: nil,
+                             root: .leaf(onOtherTab), focusedPane: onOtherTab),
+            ],
+            selectedTabID: TabID(value: 0), nextTabSeq: 2,
+            panes: [:], nextPaneSeq: 3
+        )
+        func key(_ pane: PaneID, workspace: UUID = wsID) -> WorkspaceStore.WorkspacePaneKey {
+            .init(workspace: workspace, pane: pane)
+        }
+
+        XCTAssertTrue(WorkspaceStore.paneIsVisible(
+            key(onSelectedTab), selectedWorkspaceID: wsID, in: ws))
+        // Same workspace, but the pane lives in a non-selected tab.
+        XCTAssertFalse(WorkspaceStore.paneIsVisible(
+            key(onOtherTab), selectedWorkspaceID: wsID, in: ws))
+        // Selection moved to a different workspace.
+        XCTAssertFalse(WorkspaceStore.paneIsVisible(
+            key(onSelectedTab), selectedWorkspaceID: UUID(), in: ws))
+        // Nothing selected at all (empty sidebar / startup).
+        XCTAssertFalse(WorkspaceStore.paneIsVisible(
+            key(onSelectedTab), selectedWorkspaceID: nil, in: nil))
+    }
+
     func testBackgroundWorkspaceFirstResponderDoesNotPauseIdleClock() {
         XCTAssertTrue(TerminalFocusPolicy.protectsFromIdleOfflining(
             appIsActive: true,

@@ -2298,7 +2298,20 @@ final class WorkspaceStore: ObservableObject {
 
     /// True when `key`'s pane is on screen right now: its workspace is the
     /// selected workspace AND it lives in that workspace's selected tab.
-    private func isPaneVisible(_ key: WorkspacePaneKey) -> Bool {
+    /// Shared by the idle-release "is the user watching" checks and the
+    /// deferred surface re-pin guard in `PaneSurfaceRepresentable` — the two
+    /// must agree on what "visible" means, so don't fork this logic.
+    func isPaneVisible(_ key: WorkspacePaneKey) -> Bool {
+        Self.paneIsVisible(key, selectedWorkspaceID: selectedWorkspaceID,
+                           in: selectedWorkspace)
+    }
+
+    /// Pure core of `isPaneVisible(_:)`, split out so tests can exercise it
+    /// without a live store (whose init loads persisted state and touches
+    /// the filesystem).
+    static func paneIsVisible(_ key: WorkspacePaneKey,
+                              selectedWorkspaceID: UUID?,
+                              in selectedWorkspace: Workspace?) -> Bool {
         guard selectedWorkspaceID == key.workspace,
               let tab = selectedWorkspace?.selectedTab else { return false }
         return tab.root.leaves.contains(key.pane)
