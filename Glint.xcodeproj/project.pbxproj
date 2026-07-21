@@ -27,6 +27,7 @@
 		34997DD4A4F9B64A754FE77F /* DevinHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */; };
 		370FA310A4B7CC8489BF51DE /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 712159D2C27AD5B865820384 /* WhatsNewView.swift */; };
 		3932A4CFEFF6FB81AE283645 /* AgentHookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */; };
+		3B439B6978244B06B9695824 /* nerd-fonts-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 2B1F1216422BE2A4234ABA44 /* nerd-fonts-LICENSE.txt */; };
 		3CB9F41E3B1CB4A8790D9159 /* GhosttyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC6FFB5185C403F6F44A1687 /* GhosttyManager.swift */; };
 		3EFBC4D177ED22F347A7AFB0 /* GitRepositoryWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6FB2646BF84D9DCBB89FC93 /* GitRepositoryWatcher.swift */; };
 		419DDD815048044125F5FE91 /* ReviewWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E982534C8CF6270BCF39106 /* ReviewWindow.swift */; };
@@ -132,6 +133,7 @@
 		25DADCEBA9C483C729B69388 /* Glint.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Glint.entitlements; sourceTree = "<group>"; };
 		26141150D2DB4C0589558ECC /* CodexHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHookInstallerTests.swift; sourceTree = "<group>"; };
 		265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHookInstaller.swift; sourceTree = "<group>"; };
+		2B1F1216422BE2A4234ABA44 /* nerd-fonts-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "nerd-fonts-LICENSE.txt"; sourceTree = "<group>"; };
 		2C85E16653B066382F22FEDD /* crypto-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "crypto-LICENSE.txt"; sourceTree = "<group>"; };
 		2CFFB91CE5C44976A6961F1F /* ReviewDiffParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewDiffParsingTests.swift; sourceTree = "<group>"; };
 		3023490E670A10EC38870B12 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -230,6 +232,7 @@
 				5DB06D8C68CA7B9C7E1E83E7 /* addon-fit.mjs */,
 				2C85E16653B066382F22FEDD /* crypto-LICENSE.txt */,
 				F6DDF70810465204EB990667 /* crypto.mjs */,
+				2B1F1216422BE2A4234ABA44 /* nerd-fonts-LICENSE.txt */,
 				5627A3DA0ADBDC6194E2D7A7 /* symbols-nerd-font-LICENSE.txt */,
 				911638005A9881330F4F855F /* SymbolsNerdFontMono-Regular.ttf */,
 				B7CBC5C072019BC8A7C08327 /* web-remote-index.html */,
@@ -555,6 +558,7 @@
 				EE6D05AB1D935F502865ABDA /* crypto-LICENSE.txt in Resources */,
 				FB4C8529271BF52873745556 /* crypto.mjs in Resources */,
 				262CB25BEB2B28B12C162F66 /* ghostty in Resources */,
+				3B439B6978244B06B9695824 /* nerd-fonts-LICENSE.txt in Resources */,
 				7E6DBB055150A4D140351EB6 /* symbols-nerd-font-LICENSE.txt in Resources */,
 				0D3661ECB91851F77B1E48CE /* terminfo in Resources */,
 				47BB527385B84454ABF8FC40 /* themes.json in Resources */,
