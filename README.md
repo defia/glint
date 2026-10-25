@@ -29,6 +29,24 @@ xattr -dr com.apple.quarantine /Applications/Glint.app
 
 Cask 安装方式会自动帮你做这一步。
 
+## 外部控制 CLI
+
+在设置 → 终端 → 外部控制中，点击「安装 CLI」会创建 `~/.local/bin/glint` 链接；必要时将 `~/.local/bin` 加入 `PATH`。CLI 随应用打包，无需 Node.js、Python 或 MCP。「复制 Agent 使用说明」可复制包含完整 CLI 路径的操作说明，不安装链接也能使用。
+
+已安装时设置页显示状态并禁用重复安装，可点击「卸载」移除命令链接；命令行也支持 `glint uninstall`。卸载不会删除应用内的 CLI，也不会修改控制开关。
+
+安装与控制授权相互独立。必须开启「允许外部控制」才能读取、输入或聚焦终端；关闭立即撤销访问，重新开启后旧连接和旧令牌仍不可用。CLI 不会自动启动 Glint 或开启控制。
+
+```sh
+glint --help
+glint panes list
+glint pane read '<pane-id>' --scrollback --max-lines 1000
+glint pane send '<pane-id>' --text 'pwd' --enter
+glint pane key '<pane-id>' down enter
+```
+
+`<pane-id>` 使用列表返回的完整标识。普通读写不会切换本地工作区；只有显式 `glint pane focus '<pane-id>'` 才切换。读取默认返回纯文本，可加 `--json`；其他命令返回 JSON。开发版使用 `glint --debug …`。也可直接运行 `/Applications/Glint.app/Contents/Helpers/glint`，或执行该程序的 `install` 子命令安装链接。
+
 ## 升级与卸载
 
 ```bash

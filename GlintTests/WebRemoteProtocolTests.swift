@@ -1,5 +1,6 @@
 import AppKit
 import CryptoKit
+import GhosttyKit
 import XCTest
 @testable import Glint
 
@@ -399,6 +400,7 @@ final class WebRemoteProtocolTests: XCTestCase {
         XCTAssertTrue(script.contains("(hover: none) and (pointer: coarse)"))
         XCTAssertTrue(script.contains("if (autoFocusTerminal) terminal.focus()"))
     }
+
 
     func testBundledClientRecoversStaleWebSocketConnections() throws {
         let scriptURL = try XCTUnwrap(
@@ -903,5 +905,128 @@ final class WebRemoteProtocolTests: XCTestCase {
             "text/javascript; charset=utf-8"
         )
         XCTAssertNil(WebRemoteAssets.asset(for: "/crypto.js"))
+    }
+}
+
+
+@MainActor
+final class ExternalControlTests: XCTestCase {
+    func testReadsRequireTokenAndLineLimitRejectsInvalidJSONNumbers() {
+        XCTAssertTrue(ControlBridge.requiresToken(for: "read-text"))
+        XCTAssertTrue(ControlBridge.requiresToken(for: "send-text"))
+        XCTAssertTrue(ControlBridge.requiresToken(for: "send-key"))
+        XCTAssertFalse(ControlBridge.requiresToken(for: "list"))
+        XCTAssertEqual(ControlBridge.readTextMaxLines(nil), 1000)
+        XCTAssertEqual(ControlBridge.readTextMaxLines(10_000), 10_000)
+        for invalid: Any in [true, false, 0, -1, 10_001, 2.5, "100", NSNull()] {
+            XCTAssertNil(ControlBridge.readTextMaxLines(invalid))
+        }
+    }
+
+    func testReadGridJoinsSoftWrapsAndKeepsUnicodeAndColumnGaps() throws {
+        let grid = Data(#"""
+        {
+          "styles": [], "rows": 4,
+          "row_spans": [
+            {"row":0,"column":0,"style_id":0,"cell_width":4,"text":"你好"},
+            {"row":1,"column":0,"style_id":0,"cell_width":2,"text":"😀"},
+            {"row":1,"column":4,"style_id":1,"cell_width":1,"text":"X"},
+            {"row":2,"column":0,"style_id":0,"cell_width":6,"text":"done  "}
+          ],
+          "row_wraps": [true, false, false, false],
+          "scrollback_rows": 1,
+          "scrollback_spans": [
+            {"row":0,"column":0,"style_id":0,"cell_width":7,"text":"history"}
+          ], "scrollback_row_wraps": [false]
+        }
+        """#.utf8)
+        XCTAssertEqual(GhosttySurfaceView.controlText(fromRenderGrid: grid, scrollback: false, maxLines: 1000),
+                       "你好😀  X\ndone")
+        XCTAssertEqual(GhosttySurfaceView.controlText(fromRenderGrid: grid, scrollback: true, maxLines: 1000),
+                       "history\n你好😀  X\ndone")
+        XCTAssertEqual(GhosttySurfaceView.controlText(fromRenderGrid: grid, scrollback: true, maxLines: 1), "done")
+    }
+
+    func testBackgroundTerminalReadAndWebSelectionPreserveLocalWorkspace() async throws {
+        let local = Workspace.fresh(name: "Local", accentHex: "5E5CE6", symbol: "L")
+        let remote = Workspace.fresh(name: "Controlled", accentHex: "5E5CE6", symbol: "R")
+        let pane = try XCTUnwrap(remote.selectedTab?.focusedPane)
+        let handle = "\(remote.id.uuidString):\(pane.value)"
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [local, remote]
+        store.selectedWorkspaceID = local.id
+        let view = store.surfaceView(workspaceID: remote.id, paneID: pane, cwd: "/tmp")
+        XCTAssertTrue(view.ensureLiveForWebRemoteControl())
+        let surface = try XCTUnwrap(view.surface)
+        let output = "\u{1b}[2J\u{1b}[Hcontrol-read-你好😀"
+        output.withCString { ghostty_surface_process_output(surface, $0, UInt(output.utf8.count)) }
+        switch store.controlReadText(pane: handle, scrollback: false, maxLines: 1000) {
+        case let .success(text): XCTAssertTrue(text.contains("control-read-你好😀"))
+        case let .failure(error): XCTFail(error)
+        }
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+        XCTAssertEqual(store.workspaces[1].selectedTabID, remote.selectedTabID)
+        XCTAssertTrue(store.isWorkspaceRemotelyControlled(remote.id))
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [.local])
+        XCTAssertEqual(store.paneControlSources(workspaceID: remote.id, paneID: pane), [.local])
+        XCTAssertEqual(store.paneControlSources(workspaceID: remote.id, paneID: PaneID(value: 1)), [])
+        XCTAssertEqual(store.paneControlSources(workspaceID: local.id, paneID: pane), [])
+        XCTAssertFalse(store.isWorkspaceRemotelyControlled(local.id))
+        let snapshot: WebRemoteTerminalSnapshotResult = await withCheckedContinuation { continuation in
+            store.webRemoteTerminalSnapshot(pane: handle, size: WebRemoteTerminalSize(columns: 80, rows: 24)) {
+                continuation.resume(returning: $0)
+            }
+        }
+        switch snapshot {
+        case .success: break
+        case let .failure(error): XCTFail(error)
+        }
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [.local, .web])
+        XCTAssertEqual(store.paneControlSources(workspaceID: remote.id, paneID: pane), [.local, .web])
+        XCTAssertNil(store.controlSendText(pane: handle, text: "external-input", enter: false))
+        XCTAssertNil(store.controlSendKeys(pane: handle, keys: ["left"]))
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+        // Socket activity expires without clearing the browser's ownership.
+        try await Task.sleep(for: .seconds(15.2))
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [.local, .web])
+        XCTAssertEqual(store.paneControlSources(workspaceID: remote.id, paneID: pane), [.local, .web])
+        try await Task.sleep(for: .seconds(15))
+        XCTAssertTrue(store.isWorkspaceRemotelyControlled(remote.id))
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [.web])
+        XCTAssertEqual(store.paneControlSources(workspaceID: remote.id, paneID: pane), [.web])
+        store.webRemoteReleaseTerminalSize(pane: handle)
+        XCTAssertFalse(store.isWorkspaceRemotelyControlled(remote.id))
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [])
+        XCTAssertEqual(store.paneControlSources(workspaceID: remote.id, paneID: pane), [])
+        if case let .failure(error) = store.controlReadText(pane: handle, scrollback: false, maxLines: 1000) {
+            XCTFail(error)
+        }
+        XCTAssertTrue(store.isWorkspaceRemotelyControlled(remote.id))
+        let oldEnabled = store.externalControlEnabled
+        defer { store.externalControlEnabled = oldEnabled }
+        store.externalControlEnabled = false
+        XCTAssertFalse(store.isWorkspaceRemotelyControlled(remote.id))
+    }
+
+    func testInvalidAndUnreadyReadsDoNotClaimControlOrChangeWorkspace() throws {
+        let workspace = Workspace.fresh(name: "Unready", accentHex: "5E5CE6", symbol: "U")
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [workspace]
+        store.selectedWorkspaceID = workspace.id
+        let pane = try XCTUnwrap(workspace.selectedTab?.focusedPane)
+        for (handle, limit, expected) in [
+            ("invalid", 1000, "bad-request"),
+            ("\(workspace.id.uuidString):\(pane.value)", 0, "bad-request"),
+            ("\(UUID().uuidString):1", 1000, "unknown-pane"),
+            ("\(workspace.id.uuidString):\(pane.value)", 1000, "pane-not-ready")
+        ] {
+            switch store.controlReadText(pane: handle, scrollback: false, maxLines: limit) {
+            case .success: XCTFail("Expected \(expected)")
+            case let .failure(error): XCTAssertEqual(error, expected)
+            }
+        }
+        XCTAssertEqual(store.selectedWorkspaceID, workspace.id)
+        XCTAssertFalse(store.isWorkspaceRemotelyControlled(workspace.id))
     }
 }

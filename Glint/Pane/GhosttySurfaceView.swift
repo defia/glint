@@ -2378,6 +2378,55 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         markScrollbackDirty()
     }
 
+    /// Fresh text from the live terminal, independent of the AX cache. Grid
+    /// export bounds history while preserving Unicode and soft-wrapped lines.
+    func controlReadText(scrollback: Bool, maxLines: Int) -> String? {
+        guard let surface else { return nil }
+        let json = ghostty_surface_render_grid_json(surface, "", 0, 0,
+                                                    scrollback ? UInt(maxLines) : 0)
+        defer { ghostty_string_free(json) }
+        guard let pointer = json.ptr, json.len > 0 else { return nil }
+        return Self.controlText(fromRenderGrid: Data(bytes: pointer, count: Int(json.len)),
+                                scrollback: scrollback, maxLines: maxLines)
+    }
+
+    static func controlText(fromRenderGrid data: Data, scrollback: Bool, maxLines: Int) -> String? {
+        guard maxLines > 0,
+              let grid = try? JSONDecoder().decode(RenderGrid.self, from: data) else { return nil }
+        func region(_ spans: [RenderGrid.Span], rows: Int, wraps: [Bool]) -> [(String, Bool)] {
+            let byRow = Dictionary(grouping: spans, by: \.row)
+            return (0..<max(0, rows)).map { row in
+                var text = ""
+                var column = 0
+                for span in (byRow[row] ?? []).sorted(by: { $0.column < $1.column }) {
+                    text += String(repeating: " ", count: max(0, span.column - column))
+                    text += span.text
+                    column = span.column + span.cell_width
+                }
+                let wrapped = row < wraps.count && wraps[row]
+                if !wrapped { text = String(text.reversed().drop(while: { $0 == " " }).reversed()) }
+                return (text, wrapped)
+            }
+        }
+        var rows: [(String, Bool)] = []
+        if scrollback {
+            rows += region(grid.scrollback_spans, rows: grid.scrollback_rows,
+                           wraps: grid.scrollback_row_wraps ?? [])
+        }
+        rows += region(grid.row_spans, rows: grid.rows, wraps: grid.row_wraps ?? [])
+        var lines: [String] = []
+        var current = ""
+        for (index, row) in rows.enumerated() {
+            current += row.0
+            if !row.1 || index == rows.count - 1 {
+                lines.append(current)
+                current = ""
+            }
+        }
+        while lines.last == "" { lines.removeLast() }
+        return lines.suffix(maxLines).joined(separator: "\n")
+    }
+
     func webRemoteSnapshot(maxLines: Int = 1000) -> WebRemoteTerminalSnapshot? {
         guard let s = surface else { return nil }
         let json = ghostty_surface_render_grid_json(s, "", 0, 0, UInt(maxLines))

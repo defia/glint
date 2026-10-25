@@ -1198,7 +1198,10 @@ final class WorkspaceStore: ObservableObject {
         didSet {
             UserDefaults.standard.set(externalControlEnabled, forKey: "glint.externalControlEnabled")
             if externalControlEnabled { ControlBridge.shared.start() }
-            else { ControlBridge.shared.stop() }
+            else {
+                ControlBridge.shared.stop()
+                clearExternalControlActivity()
+            }
         }
     }
 
@@ -1236,6 +1239,64 @@ final class WorkspaceStore: ObservableObject {
 
     @Published private(set) var webRemoteStatus: WebRemoteStatus = .stopped
     @Published private var webRemoteControlledPanes = Set<WorkspacePaneKey>()
+    @Published private var externalControlledPanes = Set<WorkspacePaneKey>()
+    private var externalControlExpiry: [WorkspacePaneKey: DispatchWorkItem] = [:]
+
+    enum WorkspaceControlSource: Hashable {
+        case local, web
+
+        var title: String {
+            switch self {
+            case .local: return String(localized: "Local control")
+            case .web: return String(localized: "Remote control active")
+            }
+        }
+
+        var detail: String {
+            switch self {
+            case .local:
+                return String(localized: "Local apps can read and send input to this terminal.")
+            case .web:
+                return String(localized: "Layout may be inaccurate while controlled. It will restore automatically after disconnecting.")
+            }
+        }
+    }
+
+    func paneControlSources(workspaceID: UUID, paneID: PaneID) -> [WorkspaceControlSource] {
+        let key = WorkspacePaneKey(workspace: workspaceID, pane: paneID)
+        var sources: [WorkspaceControlSource] = []
+        if externalControlledPanes.contains(key) { sources.append(.local) }
+        if webRemoteControlledPanes.contains(key) { sources.append(.web) }
+        return sources
+    }
+
+    func workspaceControlSources(_ id: UUID) -> [WorkspaceControlSource] {
+        var sources: [WorkspaceControlSource] = []
+        if externalControlledPanes.contains(where: { $0.workspace == id }) { sources.append(.local) }
+        if webRemoteControlledPanes.contains(where: { $0.workspace == id }) { sources.append(.web) }
+        return sources
+    }
+
+    func isWorkspaceRemotelyControlled(_ id: UUID) -> Bool {
+        !workspaceControlSources(id).isEmpty
+    }
+
+    private func noteExternalControlActivity(_ key: WorkspacePaneKey) {
+        externalControlExpiry[key]?.cancel()
+        externalControlledPanes.insert(key)
+        let expiry = DispatchWorkItem { [weak self] in
+            self?.externalControlledPanes.remove(key)
+            self?.externalControlExpiry.removeValue(forKey: key)
+        }
+        externalControlExpiry[key] = expiry
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30, execute: expiry)
+    }
+
+    private func clearExternalControlActivity() {
+        externalControlExpiry.values.forEach { $0.cancel() }
+        externalControlExpiry.removeAll()
+        externalControlledPanes.removeAll()
+    }
 
     var webRemoteAccessURLs: [String] {
         guard case let .ready(urls) = webRemoteStatus else { return [] }
@@ -1953,7 +2014,7 @@ final class WorkspaceStore: ObservableObject {
         guard freeIdleTerminalsEnabled else { return }
         let timeout = TimeInterval(idleTerminalTimeoutSeconds)
         for (key, view) in surfaceViews {
-            guard !webRemoteControlledPanes.contains(key) else { continue }
+            guard !webRemoteControlledPanes.contains(key), !externalControlledPanes.contains(key) else { continue }
             view.takeOfflineIfEligible(
                 enabled: true,
                 timeout: timeout,
@@ -2829,6 +2890,9 @@ final class WorkspaceStore: ObservableObject {
         // ghost entries forever.
         paneAgentState.removeValue(forKey: key)
         paneProcesses.removeValue(forKey: key)
+        webRemoteControlledPanes.remove(key)
+        externalControlExpiry.removeValue(forKey: key)?.cancel()
+        externalControlledPanes.remove(key)
         clearDockBadge(for: key)
         workspaces[i].tabs[t].focusedPane = survivor
             ?? workspaces[i].tabs[t].root.leaves.first
@@ -2949,6 +3013,7 @@ final class WorkspaceStore: ObservableObject {
         guard let view = surfaceViews[key], view.hasLiveSurface else { return "pane-not-ready" }
         view.injectText(text)
         if enter { view.injectKey(.special(keycode: 36)) }
+        noteExternalControlActivity(key)
         return nil
     }
 
@@ -2964,7 +3029,26 @@ final class WorkspaceStore: ObservableObject {
         guard paneExists(key) else { return "unknown-pane" }
         guard let view = surfaceViews[key], view.hasLiveSurface else { return "pane-not-ready" }
         for ik in parsed { view.injectKey(ik) }
+        noteExternalControlActivity(key)
         return nil
+    }
+
+    enum ControlTextResult {
+        case success(String)
+        case failure(String)
+    }
+
+    func controlReadText(pane: String, scrollback: Bool, maxLines: Int) -> ControlTextResult {
+        guard let key = Self.parsePaneKey(pane), (1...10_000).contains(maxLines) else {
+            return .failure("bad-request")
+        }
+        guard paneExists(key) else { return .failure("unknown-pane") }
+        guard let view = surfaceViews[key], view.hasLiveSurface,
+              let text = view.controlReadText(scrollback: scrollback, maxLines: maxLines) else {
+            return .failure("pane-not-ready")
+        }
+        noteExternalControlActivity(key)
+        return .success(text)
     }
 
     func controlFocus(pane: String, activateApp: Bool = true) -> String? {
@@ -3076,9 +3160,10 @@ final class WorkspaceStore: ObservableObject {
         guard paneExists(key) else {
             completion(.failure("unknown-pane")); return
         }
-        guard let view = surfaceViews[key] else {
-            completion(.failure("pane-not-ready")); return
-        }
+        // A browser can visit a pane that has never been mounted locally.
+        // Mint its stable view directly instead of selecting the desktop workspace.
+        let cwd = workspaces.first(where: { $0.id == key.workspace })?.panes[key.pane]?.workingDirectory
+        let view = surfaceView(workspaceID: key.workspace, paneID: key.pane, cwd: cwd)
         webRemoteControlledPanes.insert(key)
         view.webRemoteSnapshot(size: size) { snapshot in
             guard let snapshot else {
@@ -3323,6 +3408,8 @@ final class WorkspaceStore: ObservableObject {
         paneAgentState.removeValue(forKey: key)
         paneProcesses.removeValue(forKey: key)
         webRemoteControlledPanes.remove(key)
+        externalControlExpiry.removeValue(forKey: key)?.cancel()
+        externalControlledPanes.remove(key)
         clearDockBadge(for: key)
     }
 
@@ -3417,6 +3504,11 @@ final class WorkspaceStore: ObservableObject {
         // Drop every surface tied to this workspace (their ghostty surfaces
         // get freed in GhosttySurfaceView.deinit when the dict releases them).
         surfaceViews = surfaceViews.filter { $0.key.workspace != id }
+        webRemoteControlledPanes = webRemoteControlledPanes.filter { $0.workspace != id }
+        for key in Array(externalControlExpiry.keys) where key.workspace == id {
+            externalControlExpiry.removeValue(forKey: key)?.cancel()
+            externalControlledPanes.remove(key)
+        }
         clearDockBadges(for: workspaces[idx].panes.keys.map { WorkspacePaneKey(workspace: id, pane: $0) })
         // And their scrollback snapshots.
         for paneID in workspaces[idx].panes.keys {

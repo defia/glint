@@ -21,12 +21,12 @@
 		21C03B3AE912F4D30FA6F92C /* PaneAgentState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41DDB9C7B5A277B7924270A3 /* PaneAgentState.swift */; };
 		2218BACA355875F975446783 /* GhosttySurfaceAccessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454D414FF362C09886EA963F /* GhosttySurfaceAccessibility.swift */; };
 		262CB25BEB2B28B12C162F66 /* ghostty in Resources */ = {isa = PBXBuildFile; fileRef = 1CD90B7C77381E05E8A2BA8C /* ghostty */; };
+		2B4E37FBF98983D80AC6D093 /* ControlBridgeIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0759D0452D589BAA2384D9D3 /* ControlBridgeIntegrationTests.swift */; };
 		2D9012046800A06555DEA381 /* GitRefreshCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65BE76E8E627A5347D565968 /* GitRefreshCoordinatorTests.swift */; };
 		2DD19A3FDAE094EF32B0B9F0 /* zsh-autosuggestions.zsh in Resources */ = {isa = PBXBuildFile; fileRef = D03AFC613028C5BB0D99238D /* zsh-autosuggestions.zsh */; };
 		2E52C3AC5AD998CD3604D6BE /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */; };
 		3194A1545E36E400BC2C33E6 /* PaneSessionIdMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 797C4E86D052EF8A68DD9B39 /* PaneSessionIdMigrationTests.swift */; };
 		34997DD4A4F9B64A754FE77F /* DevinHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */; };
-		3A6E1C48B27D05F49E31A8D0 /* ExceptionBackstopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D42F0B915C6A38E640B2C71 /* ExceptionBackstopTests.swift */; };
 		370FA310A4B7CC8489BF51DE /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 712159D2C27AD5B865820384 /* WhatsNewView.swift */; };
 		3932A4CFEFF6FB81AE283645 /* AgentHookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */; };
 		3B439B6978244B06B9695824 /* nerd-fonts-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 2B1F1216422BE2A4234ABA44 /* nerd-fonts-LICENSE.txt */; };
@@ -36,6 +36,7 @@
 		432148F665B867944BD134BF /* web-remote.js in Resources */ = {isa = PBXBuildFile; fileRef = 07C2CEDE2C717743C29E6026 /* web-remote.js */; };
 		44C33E4DC10425D7555AC4E2 /* WebRemoteServerIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45C96BF92C4618FF97D68919 /* WebRemoteServerIntegrationTests.swift */; };
 		456D76955277C3299291BF60 /* SyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8037A4E0001A21E3224DD798 /* SyntaxHighlighter.swift */; };
+		477B958A2D83C669B41E516B /* ChildWindowExceptionGuard.m in Sources */ = {isa = PBXBuildFile; fileRef = 51B9A834E9404074F80E18E9 /* ChildWindowExceptionGuard.m */; };
 		47BB527385B84454ABF8FC40 /* themes.json in Resources */ = {isa = PBXBuildFile; fileRef = 6860F8F626EFDB9A289FC727 /* themes.json */; };
 		4971664CE7FBF0629C8DD709 /* ReleaseNotes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 407B3A9D15F4B9E613DA1CF8 /* ReleaseNotes.swift */; };
 		49DF8EE59313B7CFE29DA303 /* PaneTreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E646AABA8ADCE8A2A5C6F55 /* PaneTreeView.swift */; };
@@ -44,8 +45,11 @@
 		4ED4428EEC2AFB777092FAEF /* ShellRcBlockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B91F000C01FEA1C7E61F5A /* ShellRcBlockTests.swift */; };
 		5157C5439862F21202BCC44D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E67CF5D8552AE1F51386161 /* AppDelegate.swift */; };
 		57D99FDEAF8596DCDBC55ABE /* GrokHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BDAAD70DC4C2FC80F6DEA51 /* GrokHookInstallerTests.swift */; };
+		59A68E0E396F948F6CDA7984 /* CLIInstallation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D247212AF50E779FC07DD96 /* CLIInstallation.swift */; };
 		6290F26DFE2D0D5E1FEB9FA9 /* GitRefreshCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBB695363FAF3A996EF0C9FF /* GitRefreshCoordinator.swift */; };
 		632C9446752A79B9C95A5D0D /* addon-fit-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 677808A57BE53607DA391FC8 /* addon-fit-LICENSE.txt */; };
+		66F384C4ABAC9DE1CC7E2C49 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CDC0A8429C70EC3F4D3532A /* main.swift */; };
+		679D2F2C16D2459A356A3559 /* CLIInstallation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D247212AF50E779FC07DD96 /* CLIInstallation.swift */; };
 		692D1A7D490E07D796535EAA /* UpdaterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4408F9761E584DE2AB6630E2 /* UpdaterController.swift */; };
 		6B6B183329BCCDE5474D88AF /* web-remote.css in Resources */ = {isa = PBXBuildFile; fileRef = ABF0871355239B5D7C80B719 /* web-remote.css */; };
 		6BE78104E4CC97417ED400B4 /* xterm.mjs in Resources */ = {isa = PBXBuildFile; fileRef = 36D0A3B6CB143C412B8EDA7B /* xterm.mjs */; };
@@ -61,6 +65,7 @@
 		930665E39CE84564CBF9D300 /* GlintTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150EEF32284061D527E51866 /* GlintTheme.swift */; };
 		942ED7C1C1A2E823BA52F67A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3023490E670A10EC38870B12 /* Assets.xcassets */; };
 		97FE40619FD0C44784E91017 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = C8CE97CEC40ECB2954522DD7 /* InfoPlist.xcstrings */; };
+		990AF00FA16B7C782837CD39 /* ExceptionBackstopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23701EE5764B29B1104B4D4 /* ExceptionBackstopTests.swift */; };
 		9A5EC6D5F8F65EE762FCD917 /* addon-fit.mjs in Resources */ = {isa = PBXBuildFile; fileRef = 5DB06D8C68CA7B9C7E1E83E7 /* addon-fit.mjs */; };
 		9C8BC416E070194670E97100 /* AccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01DD41E0F48A7A20C41F3AE6 /* AccessibilityTests.swift */; };
 		9F605AB2DC185A94ED28E6D4 /* AgentChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3EB9A1E80F3CC4BCA468774 /* AgentChoice.swift */; };
@@ -74,7 +79,6 @@
 		B70CAFEBB2416E25B0FFED97 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C48F9D3C512A0ABE8369D0F4 /* Sparkle */; };
 		BFF9A1736CA029241BB0622D /* SSHGitRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8EDEAA2D0EAD42ED6F1915 /* SSHGitRunnerTests.swift */; };
 		C0667FA434EF07D98DED44D1 /* AEBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = 0D5B5D0462A1225A56E6EE85 /* AEBridge.m */; };
-		E52A7C1B4906D8F3B7A0E164 /* ChildWindowExceptionGuard.m in Sources */ = {isa = PBXBuildFile; fileRef = 9F3D06E27B4C15A8D2E93B50 /* ChildWindowExceptionGuard.m */; };
 		C0E8D97C08BA3F0FA33F31E7 /* CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 235E2D958A2244483CAA0812 /* CommandPalette.swift */; };
 		C11ED5034D6EF2BA539846AD /* FontCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C753FB652599A4C7900F8AA4 /* FontCatalog.swift */; };
 		C41119D04864077E5B554F59 /* CodexHomeStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AB338782EF6F22B7B381DA8 /* CodexHomeStoreTests.swift */; };
@@ -112,6 +116,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		09ABC4E3016909C2F99F4393 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BE6DB378EC4FB00E8DB46BA7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0B917384056BCF13B6E0D69C;
+			remoteInfo = GlintCLI;
+		};
 		E573422D753FD4F162230F22 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = BE6DB378EC4FB00E8DB46BA7 /* Project object */;
@@ -125,15 +136,14 @@
 		01DD41E0F48A7A20C41F3AE6 /* AccessibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityTests.swift; sourceTree = "<group>"; };
 		050E267AE14712D4D6633B4F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		05F2CA2243872C8111048EF2 /* AgentBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBridge.swift; sourceTree = "<group>"; };
+		0759D0452D589BAA2384D9D3 /* ControlBridgeIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlBridgeIntegrationTests.swift; sourceTree = "<group>"; };
 		07C2CEDE2C717743C29E6026 /* web-remote.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "web-remote.js"; sourceTree = "<group>"; };
 		08FC2FBC9E8729A5ECBF857C /* PaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneView.swift; sourceTree = "<group>"; };
 		0C5FD3EEA1ECD40F78394862 /* AgentLaunchChooser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLaunchChooser.swift; sourceTree = "<group>"; };
 		0D29C0D2447094B07854C193 /* NewWorkspaceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewWorkspaceSheet.swift; sourceTree = "<group>"; };
 		0D5B5D0462A1225A56E6EE85 /* AEBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AEBridge.m; sourceTree = "<group>"; };
-		9F3D06E27B4C15A8D2E93B50 /* ChildWindowExceptionGuard.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ChildWindowExceptionGuard.m; sourceTree = "<group>"; };
 		0D751E30DFF2EFA6F705A374 /* GhosttyTickSchedulerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTickSchedulerTests.swift; sourceTree = "<group>"; };
 		0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevinHookInstallerTests.swift; sourceTree = "<group>"; };
-		7D42F0B915C6A38E640B2C71 /* ExceptionBackstopTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExceptionBackstopTests.swift; sourceTree = "<group>"; };
 		0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageReaderTests.swift; sourceTree = "<group>"; };
 		150EEF32284061D527E51866 /* GlintTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintTheme.swift; sourceTree = "<group>"; };
 		16137B405E48DBE262A15B6D /* PaneSurfaceRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSurfaceRepresentable.swift; sourceTree = "<group>"; };
@@ -150,6 +160,7 @@
 		2CFFB91CE5C44976A6961F1F /* ReviewDiffParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewDiffParsingTests.swift; sourceTree = "<group>"; };
 		3023490E670A10EC38870B12 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		349714D49AE52D84995314FD /* MascotAssetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotAssetTests.swift; sourceTree = "<group>"; };
+		358C545756026B40E9358E3C /* glint */ = {isa = PBXFileReference; includeInIndex = 0; path = glint; sourceTree = BUILT_PRODUCTS_DIR; };
 		36D0A3B6CB143C412B8EDA7B /* xterm.mjs */ = {isa = PBXFileReference; path = xterm.mjs; sourceTree = "<group>"; };
 		376568363043C189904E4E0A /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		38E3B385162995D0F1F5B72D /* CodexHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHome.swift; sourceTree = "<group>"; };
@@ -167,6 +178,7 @@
 		4B8EDEAA2D0EAD42ED6F1915 /* SSHGitRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHGitRunnerTests.swift; sourceTree = "<group>"; };
 		4BE4DBC7E2579823474466E9 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		4EEF00CBEF45A9D60423A207 /* AgentKindResolutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentKindResolutionTests.swift; sourceTree = "<group>"; };
+		51B9A834E9404074F80E18E9 /* ChildWindowExceptionGuard.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ChildWindowExceptionGuard.m; sourceTree = "<group>"; };
 		51DE2D7740BD03498A936B62 /* PersistenceRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceRecoveryTests.swift; sourceTree = "<group>"; };
 		54663E213FE879B96C0D80E7 /* GitStatusPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitStatusPopover.swift; sourceTree = "<group>"; };
 		5627A3DA0ADBDC6194E2D7A7 /* symbols-nerd-font-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "symbols-nerd-font-LICENSE.txt"; sourceTree = "<group>"; };
@@ -177,6 +189,7 @@
 		677808A57BE53607DA391FC8 /* addon-fit-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "addon-fit-LICENSE.txt"; sourceTree = "<group>"; };
 		6860F8F626EFDB9A289FC727 /* themes.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = themes.json; sourceTree = "<group>"; };
 		6AB338782EF6F22B7B381DA8 /* CodexHomeStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHomeStoreTests.swift; sourceTree = "<group>"; };
+		6CDC0A8429C70EC3F4D3532A /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		7039488F4C2F75498E461311 /* GitDiff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitDiff.swift; sourceTree = "<group>"; };
 		712159D2C27AD5B865820384 /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
@@ -187,6 +200,7 @@
 		829D894CF747D6BC08667239 /* AgentPaneSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPaneSummary.swift; sourceTree = "<group>"; };
 		83E4DF4C5180D50C381B4976 /* WorkspaceIconKindTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceIconKindTests.swift; sourceTree = "<group>"; };
 		89B8883C4456681F07B6D662 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
+		8D247212AF50E779FC07DD96 /* CLIInstallation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIInstallation.swift; sourceTree = "<group>"; };
 		8EDE0D7C434B8E9C76C4A297 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
 		911638005A9881330F4F855F /* SymbolsNerdFontMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SymbolsNerdFontMono-Regular.ttf"; sourceTree = "<group>"; };
 		943254F613D20C4F0941EFA6 /* WebRemoteProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRemoteProtocol.swift; sourceTree = "<group>"; };
@@ -204,6 +218,7 @@
 		BD31B21D1D50D85D5D5E366A /* xterm-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "xterm-LICENSE.txt"; sourceTree = "<group>"; };
 		C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectBackground.swift; sourceTree = "<group>"; };
 		C11B3335E47DDAF77A883064 /* ModalOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalOverlay.swift; sourceTree = "<group>"; };
+		C23701EE5764B29B1104B4D4 /* ExceptionBackstopTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExceptionBackstopTests.swift; sourceTree = "<group>"; };
 		C6FB2646BF84D9DCBB89FC93 /* GitRepositoryWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRepositoryWatcher.swift; sourceTree = "<group>"; };
 		C753FB652599A4C7900F8AA4 /* FontCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontCatalog.swift; sourceTree = "<group>"; };
 		C82B0F532B8B13AB895CE778 /* AgyHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgyHookInstallerTests.swift; sourceTree = "<group>"; };
@@ -313,8 +328,9 @@
 				6AB338782EF6F22B7B381DA8 /* CodexHomeStoreTests.swift */,
 				26141150D2DB4C0589558ECC /* CodexHookInstallerTests.swift */,
 				0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */,
+				0759D0452D589BAA2384D9D3 /* ControlBridgeIntegrationTests.swift */,
 				0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */,
-				7D42F0B915C6A38E640B2C71 /* ExceptionBackstopTests.swift */,
+				C23701EE5764B29B1104B4D4 /* ExceptionBackstopTests.swift */,
 				0D751E30DFF2EFA6F705A374 /* GhosttyTickSchedulerTests.swift */,
 				65BE76E8E627A5347D565968 /* GitRefreshCoordinatorTests.swift */,
 				49C888E59D1091BFC22A9EA4 /* GitRepositoryWatcherTests.swift */,
@@ -378,6 +394,14 @@
 				39F54835E4A44EC88236EFBE /* GitService.swift */,
 			);
 			path = Git;
+			sourceTree = "<group>";
+		};
+		784B713652B6DC2C1F133E7D /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				8D247212AF50E779FC07DD96 /* CLIInstallation.swift */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 		846EE2A0E01AF110EE275AFD /* Frameworks */ = {
@@ -448,12 +472,20 @@
 			path = Glint;
 			sourceTree = "<group>";
 		};
+		C7CCB0F28353CD96F7329EF3 /* CLI */ = {
+			isa = PBXGroup;
+			children = (
+				6CDC0A8429C70EC3F4D3532A /* main.swift */,
+			);
+			path = CLI;
+			sourceTree = "<group>";
+		};
 		CE6E633968E3B9EE7F187610 /* App */ = {
 			isa = PBXGroup;
 			children = (
 				0D5B5D0462A1225A56E6EE85 /* AEBridge.m */,
 				9E67CF5D8552AE1F51386161 /* AppDelegate.swift */,
-				9F3D06E27B4C15A8D2E93B50 /* ChildWindowExceptionGuard.m */,
+				51B9A834E9404074F80E18E9 /* ChildWindowExceptionGuard.m */,
 				223D9249D7FF29F87D9DE3A4 /* Glint-Bridging-Header.h */,
 				7CB74659D174004C620D538A /* GlintApp.swift */,
 				407B3A9D15F4B9E613DA1CF8 /* ReleaseNotes.swift */,
@@ -474,9 +506,11 @@
 		EA6921C9B6CB486D18C07534 = {
 			isa = PBXGroup;
 			children = (
+				C7CCB0F28353CD96F7329EF3 /* CLI */,
 				62413EC8DC0D611EDA5E85CA /* GhosttyResources */,
 				BB4ECEBC994408CE9F33EC5A /* Glint */,
 				5F9010EBEE9DCDE13D866A74 /* GlintTests */,
+				784B713652B6DC2C1F133E7D /* Shared */,
 				846EE2A0E01AF110EE275AFD /* Frameworks */,
 				F0DEBFD467843DF4F582D172 /* Products */,
 			);
@@ -485,6 +519,7 @@
 		F0DEBFD467843DF4F582D172 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				358C545756026B40E9358E3C /* glint */,
 				3E2E78BBA22734DD486C760B /* Glint.app */,
 				E94AB23640CA1E6007F8B2B4 /* GlintTests.xctest */,
 			);
@@ -494,6 +529,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0B917384056BCF13B6E0D69C /* GlintCLI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F0FAAB9A0446F8A5053933E5 /* Build configuration list for PBXNativeTarget "GlintCLI" */;
+			buildPhases = (
+				E722ED3D8930B6DD121E3BF3 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GlintCLI;
+			packageProductDependencies = (
+			);
+			productName = GlintCLI;
+			productReference = 358C545756026B40E9358E3C /* glint */;
+			productType = "com.apple.product-type.tool";
+		};
 		370743E3F9FFC81627C407C4 /* Glint */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 4AC9F6345A7677531E105A3D /* Build configuration list for PBXNativeTarget "Glint" */;
@@ -501,10 +553,12 @@
 				86AD9E59837D6EEC7E56E0F0 /* Sources */,
 				15DB57E4B5291059A1FB8D4A /* Resources */,
 				98BEE1CADB909FBA0A70E63B /* Frameworks */,
+				D4CDAB16B8249199ECDAA28C /* Bundle Glint CLI */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				801F4A62BCA14E5741DC1DE4 /* PBXTargetDependency */,
 			);
 			name = Glint;
 			packageProductDependencies = (
@@ -566,6 +620,7 @@
 			projectRoot = "";
 			targets = (
 				370743E3F9FFC81627C407C4 /* Glint */,
+				0B917384056BCF13B6E0D69C /* GlintCLI */,
 				900A6C235CB23B81714F0821 /* GlintTests */,
 			);
 		};
@@ -603,6 +658,29 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		D4CDAB16B8249199ECDAA28C /* Bundle Glint CLI */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/glint",
+			);
+			name = "Bundle Glint CLI";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/glint",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\n/bin/mkdir -p \"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers\"\n/bin/cp \"$BUILT_PRODUCTS_DIR/glint\" \"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers/glint\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		3827C1790EDA945C32F356F3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -616,8 +694,9 @@
 				C41119D04864077E5B554F59 /* CodexHomeStoreTests.swift in Sources */,
 				0FEECB27EB1ACE11E29ECCEF /* CodexHookInstallerTests.swift in Sources */,
 				FEBC3158CB471E9ABDF931BB /* CodexUsageReaderTests.swift in Sources */,
+				2B4E37FBF98983D80AC6D093 /* ControlBridgeIntegrationTests.swift in Sources */,
 				34997DD4A4F9B64A754FE77F /* DevinHookInstallerTests.swift in Sources */,
-				3A6E1C48B27D05F49E31A8D0 /* ExceptionBackstopTests.swift in Sources */,
+				990AF00FA16B7C782837CD39 /* ExceptionBackstopTests.swift in Sources */,
 				180444BD20493AE4822BD372 /* GhosttyTickSchedulerTests.swift in Sources */,
 				2D9012046800A06555DEA381 /* GitRefreshCoordinatorTests.swift in Sources */,
 				0FB9792E290FC2A8B527B2D0 /* GitRepositoryWatcherTests.swift in Sources */,
@@ -646,13 +725,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				C0667FA434EF07D98DED44D1 /* AEBridge.m in Sources */,
-				E52A7C1B4906D8F3B7A0E164 /* ChildWindowExceptionGuard.m in Sources */,
 				E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */,
 				9F605AB2DC185A94ED28E6D4 /* AgentChoice.swift in Sources */,
 				3932A4CFEFF6FB81AE283645 /* AgentHookInstaller.swift in Sources */,
 				C95E09498A4974B811D36575 /* AgentLaunchChooser.swift in Sources */,
 				C48BD1224EA2C6D3C87B9120 /* AgentPaneSummary.swift in Sources */,
 				5157C5439862F21202BCC44D /* AppDelegate.swift in Sources */,
+				59A68E0E396F948F6CDA7984 /* CLIInstallation.swift in Sources */,
+				477B958A2D83C669B41E516B /* ChildWindowExceptionGuard.m in Sources */,
 				D0C5A885F5B3FE6BD5AFC54A /* CloseOnCmdW.swift in Sources */,
 				07817DC6A98F8ED2E236CFA1 /* CodexHome.swift in Sources */,
 				C0E8D97C08BA3F0FA33F31E7 /* CommandPalette.swift in Sources */,
@@ -696,9 +776,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E722ED3D8930B6DD121E3BF3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				679D2F2C16D2459A356A3559 /* CLIInstallation.swift in Sources */,
+				66F384C4ABAC9DE1CC7E2C49 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		801F4A62BCA14E5741DC1DE4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0B917384056BCF13B6E0D69C /* GlintCLI */;
+			targetProxy = 09ABC4E3016909C2F99F4393 /* PBXContainerItemProxy */;
+		};
 		D3E9FF39F2716E0829281863 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 370743E3F9FFC81627C407C4 /* Glint */;
@@ -769,6 +863,24 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Glint/App/Glint-Bridging-Header.h";
 			};
 			name = Release;
+		};
+		44EEA4A9F2E5095CB782DC20 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.glint.GlintCLI;
+				PRODUCT_MODULE_NAME = GlintCLI;
+				PRODUCT_NAME = glint;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
 		};
 		737FFBE4050FEC0AF1931C18 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -850,6 +962,24 @@
 				PRODUCT_BUNDLE_IDENTIFIER = app.glint.GlintTests;
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Glint.app/Contents/MacOS/Glint";
+			};
+			name = Release;
+		};
+		B067B73C976D1E7F2C606CBF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.glint.GlintCLI;
+				PRODUCT_MODULE_NAME = GlintCLI;
+				PRODUCT_NAME = glint;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
 			};
 			name = Release;
 		};
@@ -984,6 +1114,15 @@
 			buildConfigurations = (
 				D716E255757C327EE86E1B65 /* Debug */,
 				2FF28DB47A88D5C96B620971 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F0FAAB9A0446F8A5053933E5 /* Build configuration list for PBXNativeTarget "GlintCLI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				44EEA4A9F2E5095CB782DC20 /* Debug */,
+				B067B73C976D1E7F2C606CBF /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
