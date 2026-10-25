@@ -243,17 +243,6 @@
         }
       }
     },
-    "Browser control stays marked while connected. Local socket activity stays marked for 30 seconds after the last successful read or input.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "网页控制在连接期间持续显示标识。本地 socket 在最后一次成功读取或输入后保留标识 30 秒。"
-          }
-        }
-      }
-    },
     "Exposes a local socket under ~/.glint/run/ so other apps on this Mac can focus panes, read terminal contents and inject text/keys. Reading and input require the 0600 token file. Ordinary reads and input do not switch workspaces. Off by default; toggling takes effect immediately.": {
       "extractionState": "manual",
       "localizations": {
@@ -1568,17 +1557,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "已连接的浏览器将断开。系统会生成新密钥和端口，旧链接将失效。"
-          }
-        }
-      }
-    },
-    "Controlled from web": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在通过网页控制"
           }
         }
       }
