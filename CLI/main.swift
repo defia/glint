@@ -193,8 +193,10 @@ private func transact(_ invocation: Invocation) throws -> [String: Any] {
         let n = Darwin.read(fd, &buffer, buffer.count)
         if n < 0 && errno == EINTR { continue }
         guard n > 0 else { throw CLIError("Control connection closed or timed out / 控制连接已关闭或超时") }
+        let chunkStart = response.count
         response.append(buffer, count: n)
-        if let newline = response.firstIndex(of: 0x0A) {
+        // Earlier chunks contain no delimiter; scan only the bytes just received.
+        if let newline = response[chunkStart...].firstIndex(of: 0x0A) {
             guard let object = try? JSONSerialization.jsonObject(with: response.prefix(upTo: newline)) as? [String: Any],
                   object["ok"] is Bool else { throw CLIError("Invalid Glint response / Glint 响应不合法") }
             return object

@@ -66,7 +66,8 @@ class CLITests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)['panes'][0]['pane'], PANE)
 
     def test_read_unicode_scrollback_and_large_partial_response(self):
-        text = ('你好😀\t  output\n' * 150000) + 'end'
+        # Keep enough chunks to catch repeated scans of the accumulated response.
+        text = ('你好😀\t  output\n' * 300000) + 'end'
         result, request = self.exchange(
             ['pane', 'read', PANE, '--scrollback', '--max-lines', '10000'],
             {'ok': True, 'pane': PANE, 'text': text})
