@@ -95,6 +95,27 @@ class CLITests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(request['text'], '--help')
 
+    def test_help_after_socket_options_without_control(self):
+        for prefix in [[], ['--debug'], ['--socket', str(self.path)]]:
+            for command in [[], ['panes'], ['pane'], ['pane', 'read'],
+                            ['pane', 'send'], ['pane', 'key'], ['pane', 'focus']]:
+                with self.subTest(prefix=prefix, command=command):
+                    result = subprocess.run([str(BINARY), *prefix, *command, '--help'],
+                                            capture_output=True, text=True, timeout=5)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn('Usage / 用法:', result.stdout)
+                    self.assertEqual(result.stderr, '')
+        self.assertFalse(self.path.exists())
+
+    def test_help_does_not_hide_invalid_socket_options(self):
+        for options in [['--debug', '--debug'], ['--socket', str(self.path), '--debug'],
+                        ['--debug', '--socket', str(self.path)], ['--unknown']]:
+            with self.subTest(options=options):
+                result = subprocess.run([str(BINARY), *options, '--help'],
+                                        capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.stdout, '')
+
     def test_keys(self):
         result, request = self.exchange(['pane', 'key', PANE, 'down', 'A', 'enter'], {'ok': True})
         self.assertEqual(result.returncode, 0, result.stderr)

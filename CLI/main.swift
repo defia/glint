@@ -47,12 +47,11 @@ private struct Invocation {
     var plainText = false
 }
 
-private func parse(_ arguments: [String]) throws -> Invocation {
-    var args = arguments[...]
+private func parseSocketOptions(_ args: inout ArraySlice<String>) throws -> String {
     var socketPath = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".glint/run/control.sock").path
     var selectedSocket = false
-    while let first = args.first, first.hasPrefix("--") {
+    while let first = args.first, first.hasPrefix("--"), first != "--help" {
         args.removeFirst()
         guard !selectedSocket else { throw CLIError("Choose only one socket / 只能指定一个 socket", code: 2) }
         selectedSocket = true
@@ -69,6 +68,11 @@ private func parse(_ arguments: [String]) throws -> Invocation {
         default: throw CLIError("Unknown option / 未知选项: \(first)", code: 2)
         }
     }
+    return socketPath
+}
+
+private func parse(_ arguments: [String], socketPath: String) throws -> Invocation {
+    var args = arguments[...]
     if Array(args) == ["panes", "list"] {
         return Invocation(socketPath: socketPath, request: ["cmd": "list"])
     }
@@ -200,7 +204,9 @@ private func transact(_ invocation: Invocation) throws -> [String: Any] {
 }
 
 private func run() throws {
-    let args = Array(CommandLine.arguments.dropFirst())
+    var remaining = CommandLine.arguments.dropFirst()
+    let socketPath = try parseSocketOptions(&remaining)
+    let args = Array(remaining)
     let helpPrefixes = [[], ["panes"], ["pane"], ["pane", "read"], ["pane", "send"],
                         ["pane", "key"], ["pane", "focus"], ["install"], ["uninstall"]]
     if args.isEmpty || args == ["help"]
@@ -233,7 +239,7 @@ private func run() throws {
         }
         return
     }
-    let invocation = try parse(args)
+    let invocation = try parse(args, socketPath: socketPath)
     let response = try transact(invocation)
     guard response["ok"] as? Bool == true else {
         // Never echo requests or token values in errors.
