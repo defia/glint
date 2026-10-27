@@ -22,6 +22,7 @@ class CLITests(unittest.TestCase):
         self.path = self.root / 'control.sock'
         self.token = 'test-only-token'
         self.path.with_suffix('.token').write_text(self.token)
+        self.path.with_suffix('.token').chmod(0o600)
         self.addCleanup(self.temp.cleanup)
 
     def run_cli(self, *args):
@@ -31,6 +32,7 @@ class CLITests(unittest.TestCase):
     def exchange(self, args, response):
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         listener.bind(str(self.path))
+        self.path.chmod(0o600)
         listener.listen(1)
         listener.settimeout(5)
         captured = []
@@ -180,6 +182,75 @@ class CLITests(unittest.TestCase):
         self.assertTrue(BINARY.is_file())
         result = subprocess.run(args, capture_output=True, text=True, timeout=5)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_install_repairs_only_links_to_other_glint_bundles(self):
+        directory = self.root / 'bin'
+        directory.mkdir()
+        link = directory / 'glint'
+        old = self.root / 'Moved/Glint.app/Contents/Helpers/glint'
+        link.symlink_to(old)
+        result = subprocess.run([str(BINARY), 'install', '--directory', str(directory)],
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(link.resolve(), BINARY)
+        link.unlink()
+        link.symlink_to(old)
+        result = subprocess.run([str(BINARY), 'uninstall', '--directory', str(directory)],
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(link.is_symlink())
+
+    def test_custom_socket_rejects_unsafe_permissions_without_sending_token(self):
+        for target in ['directory', 'socket', 'token', 'token-symlink']:
+            with self.subTest(target=target):
+                listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                listener.bind(str(self.path))
+                listener.listen(1)
+                listener.settimeout(0.3)
+                self.path.chmod(0o600)
+                token = self.path.with_suffix('.token')
+                if target == 'directory': self.root.chmod(0o755)
+                if target == 'socket': self.path.chmod(0o666)
+                if target == 'token': token.chmod(0o644)
+                if target == 'token-symlink':
+                    original = self.root / 'original-token'
+                    token.rename(original)
+                    token.symlink_to(original)
+                requests = []
+                def serve():
+                    try:
+                        conn, _ = listener.accept()
+                        with conn:
+                            requests.append(conn.recv(4096))
+                            conn.sendall(b'{"ok":true,"text":"unsafe"}\n')
+                    except (TimeoutError, BrokenPipeError): pass
+                    finally: listener.close()
+                worker = threading.Thread(target=serve, daemon=True)
+                worker.start()
+                result = self.run_cli('pane', 'read', PANE)
+                worker.join(1)
+                self.root.chmod(0o700)
+                token.unlink()
+                token.write_text(self.token)
+                token.chmod(0o600)
+                self.path.unlink()
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn('unsafe', result.stderr.lower())
+                self.assertEqual(requests, [])
+
+    def test_oversized_encoded_request_is_rejected_before_connecting(self):
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.addCleanup(listener.close)
+        listener.bind(str(self.path))
+        self.path.chmod(0o600)
+        listener.listen(1)
+        listener.settimeout(0.1)
+        # JSON escaping expands this under-argv-limit input beyond the protocol limit.
+        result = self.run_cli('pane', 'send', PANE, '--text', '\x01' * 180000)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('request-too-large', result.stderr)
+        self.assertNotIn(self.token, result.stderr)
+        with self.assertRaises(TimeoutError): listener.accept()
 
     def test_uninstall_preserves_other_files_and_links(self):
         directory = self.root / 'bin'

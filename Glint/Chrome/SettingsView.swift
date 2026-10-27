@@ -1146,8 +1146,8 @@ private struct TerminalPane: View {
                             cliMessage = String(format: String(localized: "Installed at %@. Add ~/.local/bin to PATH if needed. External control remains governed by the switch above."), path.path)
                         } catch { cliMessage = error.localizedDescription }
                     }
-                    .disabled(cliInstallationState != .notInstalled)
-                    if cliInstallationState == .installed {
+                    .disabled(cliInstallationState == .installed || cliInstallationState == .conflict)
+                    if cliInstallationState == .installed || cliInstallationState == .repairable {
                         Button("Uninstall") {
                             defer { refreshCLIInstallation() }
                             do {
@@ -1420,9 +1420,10 @@ private struct TerminalPane: View {
 
     private var cliInstallationLabel: String {
         switch cliInstallationState {
-        case .installed: return "Installed"
-        case .notInstalled: return "Not installed"
-        case .conflict: return "Command name in use"
+        case .installed: return String(localized: "Installed")
+        case .notInstalled: return String(localized: "Not installed")
+        case .conflict: return String(localized: "Command name in use")
+        case .repairable: return String(localized: "Needs repair")
         }
     }
 
@@ -1430,6 +1431,8 @@ private struct TerminalPane: View {
         switch cliInstallationState {
         case .installed:
             return String(localized: "Installed at ~/.local/bin/glint. Uninstall removes only the command link.")
+        case .repairable:
+            return String(localized: "The CLI link points to another Glint installation. Install again to repair it, or uninstall the link.")
         case .notInstalled:
             return String(localized: "Installs ~/.local/bin/glint. Installation does not enable external control.")
         case .conflict:

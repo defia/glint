@@ -94,11 +94,6 @@ final class ControlBridgeIntegrationTests: XCTestCase {
         store.selectedWorkspaceID = local.id
         let pane = try XCTUnwrap(target.selectedTab?.focusedPane)
         let handle = "\(target.id.uuidString):\(pane.value)"
-        let view = store.surfaceView(workspaceID: target.id, paneID: pane, cwd: "/tmp")
-        XCTAssertTrue(view.ensureLiveForWebRemoteControl())
-        let surface = try XCTUnwrap(view.surface)
-        let marker = "\u{1b}[2J\u{1b}[HCLI 你好😀\r\n"
-        marker.withCString { ghostty_surface_process_output(surface, $0, UInt(marker.utf8.count)) }
         let bridge = ControlBridge(runDirectory: root, isEnabled: { true })
         bridge.start()
         defer { bridge.stop() }
@@ -107,6 +102,13 @@ final class ControlBridgeIntegrationTests: XCTestCase {
         let listed = try await cli(prefix + ["panes", "list"])
         XCTAssertEqual(listed.status, 0, listed.error)
         XCTAssertTrue(listed.output.contains(handle))
+        let firstRead = try await cli(prefix + ["pane", "read", handle])
+        XCTAssertEqual(firstRead.status, 0, firstRead.error)
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+        let view = store.surfaceView(workspaceID: target.id, paneID: pane, cwd: "/tmp")
+        let surface = try XCTUnwrap(view.surface)
+        let marker = "\u{1b}[2J\u{1b}[HCLI 你好😀\r\n"
+        marker.withCString { ghostty_surface_process_output(surface, $0, UInt(marker.utf8.count)) }
         let read = try await cli(prefix + ["pane", "read", handle])
         XCTAssertEqual(read.status, 0, read.error)
         XCTAssertTrue(read.output.contains("CLI 你好😀"), read.output)
@@ -172,6 +174,34 @@ final class ControlBridgeIntegrationTests: XCTestCase {
         let on = try await cli(["--socket", path, "panes", "list"])
         XCTAssertEqual(on.status, 0, on.error)
         XCTAssertEqual(store.selectedWorkspaceID, local.id)
+    }
+
+    func testOversizedSocketRequestReturnsExplicitError() async throws {
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        let bridge = ControlBridge(runDirectory: try directory(), isEnabled: { true })
+        bridge.start()
+        defer { bridge.stop(); withExtendedLifetime(store) {} }
+        let path = bridge.socketPath
+        let response = try await Task.detached { () throws -> [String: Any] in
+            let fd = try Self.connect(path)
+            defer { close(fd) }
+            // No newline: the server must reject an oversized in-progress frame.
+            let payload = Data(repeating: 0x61, count: (1 << 20) + 1)
+            try payload.withUnsafeBytes { raw in
+                var sent = 0
+                while sent < raw.count {
+                    let n = Darwin.write(fd, raw.baseAddress!.advanced(by: sent), raw.count - sent)
+                    guard n > 0 else { throw POSIXError(.EIO) }
+                    sent += n
+                }
+            }
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            let count = Darwin.read(fd, &buffer, buffer.count)
+            guard count > 0 else { throw POSIXError(.EIO) }
+            return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(buffer.prefix(count))) as? [String: Any])
+        }.value
+        XCTAssertEqual(response["ok"] as? Bool, false)
+        XCTAssertEqual(response["error"] as? String, "request-too-large")
     }
 
     func testDefaultBridgeRejectsAccessWhenPreferenceIsOff() async throws {

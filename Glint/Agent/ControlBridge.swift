@@ -226,7 +226,8 @@ final class ControlBridge {
             while let nl = buf.firstIndex(of: 0x0A) {
                 let line = buf.subdata(in: buf.startIndex..<nl)
                 buf.removeSubrange(buf.startIndex...nl)
-                var resp = handle(line: line, sessionID: sessionID)
+                var resp = line.count > (1 << 20)
+                    ? Self.errorResponse("request-too-large") : handle(line: line, sessionID: sessionID)
                 resp.append(0x0A)
                 let sent = resp.withUnsafeBytes { raw -> Bool in
                     var offset = 0
@@ -240,7 +241,14 @@ final class ControlBridge {
                 }
                 if !sent { return }
             }
-            if buf.count > (1 << 20) { break }
+            if buf.count > (1 << 20) {
+                var response = Self.errorResponse("request-too-large")
+                response.append(0x0A)
+                response.withUnsafeBytes { raw in
+                    _ = Darwin.write(fd, raw.baseAddress, raw.count)
+                }
+                return
+            }
         }
     }
 
@@ -251,6 +259,7 @@ final class ControlBridge {
         }
 
         var response = Self.errorResponse("unknown-cmd")
+        var readGrid: (pane: String, data: Data, scrollback: Bool, maxLines: Int)?
         DispatchQueue.main.sync {
             guard let store = WorkspaceStore.current else {
                 response = Self.errorResponse("bad-request")
@@ -280,10 +289,11 @@ final class ControlBridge {
                       let maxLines = Self.readTextMaxLines(obj["maxLines"]) else {
                     response = Self.errorResponse("bad-request"); return
                 }
-                switch store.controlReadText(pane: pane,
+                switch store.controlReadGrid(pane: pane,
                                              scrollback: obj["scrollback"] as? Bool ?? false,
                                              maxLines: maxLines) {
-                case let .success(text): response = Self.okResponse(["pane": pane, "text": text])
+                case let .success(grid):
+                    readGrid = (pane, grid, obj["scrollback"] as? Bool ?? false, maxLines)
                 case let .failure(error): response = Self.errorResponse(error)
                 }
 
@@ -309,6 +319,15 @@ final class ControlBridge {
             default:
                 response = Self.errorResponse("unknown-cmd")
             }
+        }
+        // The main queue owns Ghostty; decoding, span assembly and response JSON
+        // belong to this connection's serve thread, especially for large history.
+        if let readGrid {
+            guard let text = GhosttySurfaceView.controlText(fromRenderGrid: readGrid.data,
+                scrollback: readGrid.scrollback, maxLines: readGrid.maxLines) else {
+                return Self.errorResponse("pane-not-ready")
+            }
+            return Self.okResponse(["pane": readGrid.pane, "text": text])
         }
         return response
     }

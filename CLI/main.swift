@@ -18,6 +18,9 @@ Usage / 用法:
 Enable Settings > Terminal > External control in Glint first.
 请先在 Glint 设置 > 终端 > 外部控制中开启控制开关。
 The CLI never enables control or launches Glint. / CLI 不会开启控制或启动 Glint。
+Custom sockets require a private directory (0700) and socket/token files (0600), owned by your user.
+自定义 socket 的目录须为 0700，socket 与 token 文件须为 0600，且均归当前用户所有。
+Encoded requests are limited to 1 MiB. / 编码后的请求最多 1 MiB。
 Default: ~/.glint/run/control.sock; --debug selects control-debug.sock.
 默认连接正式版；--debug 连接开发版。--socket selects an explicit socket / 指定 socket。
 PANE is the full handle returned by `panes list` / PANE 使用列表返回的完整标识。
@@ -141,7 +144,39 @@ private func parse(_ arguments: [String], socketPath: String) throws -> Invocati
     return Invocation(socketPath: socketPath, request: request, plainText: plainText)
 }
 
+private func validateControlSocket(_ path: String) throws {
+    let directory = URL(fileURLWithPath: path).deletingLastPathComponent().resolvingSymlinksInPath().path
+    var parent = stat(), endpoint = stat()
+    guard lstat(path, &endpoint) == 0 else {
+        throw CLIError("Glint is unavailable or external control is off. Enable External control in Glint Settings. / Glint 未运行或外部控制已关闭，请在设置中开启。")
+    }
+    guard stat(directory, &parent) == 0, parent.st_uid == getuid(),
+          parent.st_mode & S_IFMT == S_IFDIR, parent.st_mode & 0o077 == 0,
+          endpoint.st_uid == getuid(), endpoint.st_mode & S_IFMT == S_IFSOCK,
+          endpoint.st_mode & 0o077 == 0 else {
+        throw CLIError("Unsafe control socket: use a private directory (0700) and socket (0600) owned by your user. / 控制 socket 不安全：目录须为 0700，socket 须为 0600，且均归当前用户所有。")
+    }
+}
+
+private func readControlToken(socketPath: String) throws -> String {
+    let path = URL(fileURLWithPath: socketPath).deletingPathExtension().appendingPathExtension("token").path
+    let fd = open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+    guard fd >= 0 else { throw CLIError("Control token is unavailable or unsafe. Re-enable External control in Glint. / 控制令牌不可用或不安全，请重新开启外部控制。") }
+    let file = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+    var info = stat()
+    guard fstat(fd, &info) == 0, info.st_uid == getuid(),
+          info.st_mode & S_IFMT == S_IFREG, info.st_mode & 0o077 == 0,
+          info.st_size > 0, info.st_size <= 4096 else {
+        throw CLIError("Unsafe control token: use a regular file (0600) owned by your user. / 控制令牌不安全：须为归当前用户所有的 0600 普通文件。")
+    }
+    let token = String(decoding: file.readDataToEndOfFile(), as: UTF8.self)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !token.isEmpty else { throw CLIError("Control token is empty / 控制令牌为空") }
+    return token
+}
+
 private func transact(_ invocation: Invocation) throws -> [String: Any] {
+    try validateControlSocket(invocation.socketPath)
     let fd = socket(AF_UNIX, SOCK_STREAM, 0)
     guard fd >= 0 else { throw CLIError("Cannot create socket / 无法创建 socket") }
     defer { close(fd) }
@@ -160,6 +195,15 @@ private func transact(_ invocation: Invocation) throws -> [String: Any] {
             _ = strlcpy(target.baseAddress!.assumingMemoryBound(to: CChar.self), source, target.count)
         }
     }
+    var request = invocation.request
+    if ["send-text", "send-key", "read-text"].contains(request["cmd"] as? String ?? "") {
+        request["token"] = try readControlToken(socketPath: invocation.socketPath)
+    }
+    var payload = try JSONSerialization.data(withJSONObject: request, options: [.sortedKeys])
+    guard payload.count <= 1 << 20 else {
+        throw CLIError("request-too-large: encoded requests must not exceed 1 MiB / 编码后的请求不得超过 1 MiB", code: 2)
+    }
+    payload.append(0x0A)
     let connected = withUnsafePointer(to: &address) {
         $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
             Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
@@ -168,16 +212,6 @@ private func transact(_ invocation: Invocation) throws -> [String: Any] {
     guard connected == 0 else {
         throw CLIError("Glint is unavailable or external control is off. Open Glint and enable External control in Settings. / Glint 未运行或外部控制已关闭，请在设置中开启。")
     }
-    var request = invocation.request
-    if ["send-text", "send-key", "read-text"].contains(request["cmd"] as? String ?? "") {
-        let tokenPath = URL(fileURLWithPath: invocation.socketPath).deletingPathExtension().appendingPathExtension("token")
-        guard let token = try? String(contentsOf: tokenPath, encoding: .utf8), !token.isEmpty else {
-            throw CLIError("Control token is unavailable. Re-enable External control in Glint. / 无法读取控制令牌，请在 Glint 中重新开启外部控制。")
-        }
-        request["token"] = token.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    var payload = try JSONSerialization.data(withJSONObject: request, options: [.sortedKeys])
-    payload.append(0x0A)
     try payload.withUnsafeBytes { raw in
         var offset = 0
         while offset < raw.count {
@@ -245,7 +279,11 @@ private func run() throws {
     let response = try transact(invocation)
     guard response["ok"] as? Bool == true else {
         // Never echo requests or token values in errors.
-        throw CLIError("Glint rejected the command / Glint 拒绝命令: \(response["error"] as? String ?? "unknown-error")")
+        let error = response["error"] as? String ?? "unknown-error"
+        if error == "pane-requires-local-open" {
+            throw CLIError("Open this terminal in Glint first (or explicitly use pane focus PANE), then retry. Pending startup and agent restore commands require a local view. / 请先在 Glint 中打开此终端（或明确使用 pane focus PANE），再重试；待启动和 agent 恢复命令须在本地视图中运行。")
+        }
+        throw CLIError("Glint rejected the command / Glint 拒绝命令: \(error)")
     }
     if invocation.plainText {
         guard let text = response["text"] as? String else { throw CLIError("Missing terminal text / 响应缺少终端文字") }

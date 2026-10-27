@@ -1,7 +1,7 @@
 import Foundation
 
 enum CLIInstallation {
-    enum State { case notInstalled, installed, conflict }
+    enum State { case notInstalled, installed, repairable, conflict }
 
     static func state(executable: URL, directory: URL) -> State {
         let fm = FileManager.default
@@ -9,8 +9,9 @@ enum CLIInstallation {
         if let existing = try? fm.destinationOfSymbolicLink(atPath: destination.path) {
             let target = URL(fileURLWithPath: existing, relativeTo: directory)
                 .standardizedFileURL.resolvingSymlinksInPath()
-            return target == executable.standardizedFileURL.resolvingSymlinksInPath()
-                ? .installed : .conflict
+            if target == executable.standardizedFileURL.resolvingSymlinksInPath() { return .installed }
+            // Recognize only Glint's helper layout; foreign dangling links stay protected.
+            return target.path.hasSuffix("/Glint.app/Contents/Helpers/glint") ? .repairable : .conflict
         }
         return fm.fileExists(atPath: destination.path) ? .conflict : .notInstalled
     }
@@ -27,6 +28,8 @@ enum CLIInstallation {
                 String(localized: "CLI is already installed.")])
         case .conflict: throw occupiedPathError()
         case .notInstalled: break
+        case .repairable:
+            try fm.removeItem(at: directory.appendingPathComponent("glint"))
         }
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         let destination = directory.appendingPathComponent("glint")
@@ -36,7 +39,7 @@ enum CLIInstallation {
 
     static func uninstall(executable: URL, directory: URL) throws {
         switch state(executable: executable, directory: directory) {
-        case .installed:
+        case .installed, .repairable:
             // Remove only the verified link, never the executable or another tool.
             try FileManager.default.removeItem(at: directory.appendingPathComponent("glint"))
         case .conflict: throw occupiedPathError()

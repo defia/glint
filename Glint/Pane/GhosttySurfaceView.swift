@@ -100,6 +100,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// One-shot launch input. Cleared after the first successful surface
     /// creation so waking an offline terminal never re-runs an agent command.
     private var pendingInitialInput: String?
+    var hasPendingInitialInput: Bool { pendingInitialInput?.isEmpty == false }
     /// Latest cwd pushed by ghostty via OSC 7 / PWD action. Preferred over
     /// proc_pidinfo polling because it's event-driven.
     var cachedCwd: String?
@@ -2380,17 +2381,16 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     /// Fresh text from the live terminal, independent of the AX cache. Grid
     /// export bounds history while preserving Unicode and soft-wrapped lines.
-    func controlReadText(scrollback: Bool, maxLines: Int) -> String? {
+    func controlReadGrid(scrollback: Bool, maxLines: Int) -> Data? {
         guard let surface else { return nil }
         let json = ghostty_surface_render_grid_json(surface, "", 0, 0,
                                                     scrollback ? UInt(maxLines) : 0)
         defer { ghostty_string_free(json) }
         guard let pointer = json.ptr, json.len > 0 else { return nil }
-        return Self.controlText(fromRenderGrid: Data(bytes: pointer, count: Int(json.len)),
-                                scrollback: scrollback, maxLines: maxLines)
+        return Data(bytes: pointer, count: Int(json.len))
     }
 
-    static func controlText(fromRenderGrid data: Data, scrollback: Bool, maxLines: Int) -> String? {
+    nonisolated static func controlText(fromRenderGrid data: Data, scrollback: Bool, maxLines: Int) -> String? {
         guard maxLines > 0,
               let grid = try? JSONDecoder().decode(RenderGrid.self, from: data) else { return nil }
         func region(_ spans: [RenderGrid.Span], rows: Int, wraps: [Bool]) -> [(String, Bool)] {

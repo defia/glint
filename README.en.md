@@ -33,7 +33,7 @@ The Homebrew Cask does this automatically.
 
 In Settings → Terminal → External control, **Install CLI** creates `~/.local/bin/glint`. Add `~/.local/bin` to `PATH` if needed. The native CLI ships with Glint and requires no Node.js, Python, or MCP. **Copy Agent instructions** includes the full executable path and works without installing the link.
 
-Settings shows the installed state and disables repeat installation. Use **Uninstall** or `glint uninstall` to remove its command link. Uninstalling preserves the bundled CLI and the control preference.
+Settings shows the installed state and disables repeat installation. Use **Uninstall** or `glint uninstall` to remove its command link. Uninstalling preserves the bundled CLI and the control preference. After moving Glint, links to the old Glint installation can be repaired by installing again, or removed with uninstall. Other tools’ files and links are preserved.
 
 Installing the CLI does not grant control. **Allow external control** must be enabled for reads, input, and focus. Turning it off revokes access immediately; old connections and tokens remain invalid after re-enabling it. The CLI never launches Glint or enables control automatically.
 
@@ -46,6 +46,8 @@ glint pane key '<pane-id>' down enter
 ```
 
 Use the full pane handle from the list. Reads and input preserve local workspace selection; only explicit `glint pane focus '<pane-id>'` switches focus. Reads return plain text unless `--json` is supplied; other commands return JSON. Use `glint --debug …` for a development build. You can also run `/Applications/Glint.app/Contents/Helpers/glint` directly, or use its `install` subcommand to install the link.
+
+Ordinary background terminals wake on demand without changing workspaces. If a terminal has a pending startup or agent restore command, the CLI and Web prompt you to open it in Glint first; remote access does not run those commands without a local view. Custom `--socket` endpoints require a user-owned private directory (0700) and user-owned socket/token files (0600); token symlinks are rejected. Encoded requests are limited to 1 MiB, with explicit errors for oversized requests.
 
 ## Upgrade & uninstall
 
