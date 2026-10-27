@@ -1134,4 +1134,65 @@ final class ExternalControlTests: XCTestCase {
         XCTAssertFalse(view.hasLiveSurface)
     }
 
+    func testCLIRequiresLocalOpenBeforeWakingPaneWithArchivedHistory() async throws {
+        let defaults = UserDefaults.standard
+        let setting = "glint.restoreTerminalScrollback"
+        let previous = defaults.object(forKey: setting)
+        defaults.set(true, forKey: setting)
+        defer {
+            if let previous { defaults.set(previous, forKey: setting) }
+            else { defaults.removeObject(forKey: setting) }
+        }
+        let local = Workspace.fresh(name: "Local", accentHex: "5E5CE6", symbol: "L")
+        let remote = Workspace.fresh(name: "Archived history", accentHex: "5E5CE6", symbol: "R")
+        let pane = try XCTUnwrap(remote.selectedTab?.focusedPane)
+        let handle = "\(remote.id.uuidString):\(pane.value)"
+        let archiveID = ScrollbackArchive.fileID(forPaneKey: handle)
+        let directory = try XCTUnwrap(SupportDir.url).appendingPathComponent("scrollback", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let archive = directory.appendingPathComponent("\(archiveID).ansi")
+        defer { try? FileManager.default.removeItem(at: archive) }
+        let oldMarker = "PR132_ARCHIVED_HISTORY"
+        let history = Data((oldMarker + "\n").utf8)
+        let store = WorkspaceStore(activity: PaneActivityStore())
+        store.workspaces = [local, remote]
+        store.selectedWorkspaceID = local.id
+        // Finish the store initialization prune before creating this test-only archive.
+        ScrollbackArchive.drain()
+        try history.write(to: archive, options: .atomic)
+
+        if case let .failure(error) = store.controlReadGrid(pane: handle, scrollback: true, maxLines: 1000) {
+            XCTAssertEqual(error, "pane-requires-local-open")
+        } else { XCTFail("CLI must not wake a shell before its archive can be restored") }
+        XCTAssertEqual(store.controlSendText(pane: handle, text: "must-not-run", enter: true), "pane-requires-local-open")
+        XCTAssertEqual(store.controlSendKeys(pane: handle, keys: ["enter"]), "pane-requires-local-open")
+        let view = store.surfaceView(workspaceID: remote.id, paneID: pane, cwd: nil)
+        XCTAssertFalse(view.hasLiveSurface)
+        XCTAssertEqual(ScrollbackArchive.read(id: archiveID), history)
+        XCTAssertEqual(store.workspaceControlSources(remote.id), [])
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+
+        // Web has an explicit grid and a restore completion barrier; keep that path usable.
+        let snapshot: WebRemoteTerminalSnapshotResult = await withCheckedContinuation { continuation in
+            store.webRemoteTerminalSnapshot(pane: handle, size: WebRemoteTerminalSize(columns: 100, rows: 30)) {
+                continuation.resume(returning: $0)
+            }
+        }
+        if case let .success(value) = snapshot {
+            XCTAssertTrue(String(decoding: value.payload, as: UTF8.self).contains(oldMarker))
+        } else { XCTFail("Web must still restore archived history at its requested grid size") }
+        let surface = try XCTUnwrap(view.surface)
+        let newMarker = "PR132_NEW_SESSION_OUTPUT"
+        let output = newMarker + "\r\n"
+        output.withCString { ghostty_surface_process_output(surface, $0, UInt(output.utf8.count)) }
+        guard case let .success(grid) = store.controlReadGrid(pane: handle, scrollback: true, maxLines: 1000),
+              let text = GhosttySurfaceView.controlText(fromRenderGrid: grid, scrollback: true, maxLines: 1000) else {
+            return XCTFail("A completed restore must permit subsequent CLI reads")
+        }
+        let oldRange = try XCTUnwrap(text.range(of: oldMarker))
+        let newRange = try XCTUnwrap(text.range(of: newMarker))
+        XCTAssertLessThan(oldRange.lowerBound, newRange.lowerBound)
+        XCTAssertEqual(store.selectedWorkspaceID, local.id)
+    }
+
 }

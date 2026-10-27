@@ -200,6 +200,25 @@ class CLITests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(link.is_symlink())
 
+    def test_install_and_uninstall_preserve_another_existing_glint(self):
+        directory = self.root / 'bin'
+        directory.mkdir()
+        other = self.root / 'Other/Glint.app/Contents/Helpers/glint'
+        other.parent.mkdir(parents=True)
+        other.write_text('#!/bin/sh\nexit 0\n')
+        other.chmod(0o755)
+        link = directory / 'glint'
+        link.symlink_to(other)
+        inode = link.lstat().st_ino
+        for command in ['install', 'uninstall']:
+            result = subprocess.run([str(BINARY), command, '--directory', str(directory)],
+                                    capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertEqual(link.resolve(), other.resolve())
+            self.assertEqual(link.lstat().st_ino, inode)
+            self.assertIn('another', result.stderr)
+        self.assertTrue(other.is_file())
+
     def test_custom_socket_rejects_unsafe_permissions_without_sending_token(self):
         for target in ['directory', 'socket', 'token', 'token-symlink']:
             with self.subTest(target=target):

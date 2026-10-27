@@ -245,6 +245,25 @@ final class ControlBridgeIntegrationTests: XCTestCase {
         XCTAssertEqual(CLIInstallation.state(executable: tool, directory: bin), .installed)
     }
 
+    func testCLIInstallationDistinguishesExistingGlintFromDanglingLink() throws {
+        let root = try directory()
+        let executable = URL(fileURLWithPath: "/bin/sh")
+        let other = root.appendingPathComponent("Other/Glint.app/Contents/Helpers/glint")
+        try FileManager.default.createDirectory(at: other.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: other)
+        let link = root.appendingPathComponent("glint")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: other)
+        XCTAssertEqual(CLIInstallation.state(executable: executable, directory: root), .linkedElsewhere)
+        XCTAssertThrowsError(try CLIInstallation.install(executable: executable, directory: root))
+        XCTAssertThrowsError(try CLIInstallation.uninstall(executable: executable, directory: root))
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: link.path), other.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: other.path))
+        try FileManager.default.removeItem(at: other)
+        XCTAssertEqual(CLIInstallation.state(executable: executable, directory: root), .repairable)
+        _ = try CLIInstallation.install(executable: executable, directory: root)
+        XCTAssertEqual(CLIInstallation.state(executable: executable, directory: root), .installed)
+    }
+
     func testCLIUninstallRefusesReplacedFilesAndForeignLinks() throws {
         let root = try directory()
         let tool = URL(fileURLWithPath: "/bin/sh")

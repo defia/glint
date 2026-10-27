@@ -281,7 +281,7 @@ private func run() throws {
         // Never echo requests or token values in errors.
         let error = response["error"] as? String ?? "unknown-error"
         if error == "pane-requires-local-open" {
-            throw CLIError("Open this terminal in Glint first (or explicitly use pane focus PANE), then retry. Pending startup and agent restore commands require a local view. / 请先在 Glint 中打开此终端（或明确使用 pane focus PANE），再重试；待启动和 agent 恢复命令须在本地视图中运行。")
+            throw CLIError("Open this terminal in Glint first (or explicitly use pane focus PANE), then retry. Pending history, startup and agent restoration require a local view. / 请先在 Glint 中打开此终端（或明确使用 pane focus PANE），再重试；待恢复历史、待启动和 agent 恢复命令须先在本地视图中处理。")
         }
         throw CLIError("Glint rejected the command / Glint 拒绝命令: \(error)")
     }

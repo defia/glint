@@ -1138,7 +1138,7 @@ private struct TerminalPane: View {
                 HStack(spacing: 8) {
                     StatusPill(label: cliInstallationLabel,
                                tone: cliInstallationState == .installed ? .ok
-                                    : (cliInstallationState == .conflict ? .warn : .neutral))
+                                    : ((cliInstallationState == .conflict || cliInstallationState == .repairable) ? .warn : .neutral))
                     Button("Install CLI") {
                         defer { refreshCLIInstallation() }
                         do {
@@ -1146,7 +1146,7 @@ private struct TerminalPane: View {
                             cliMessage = String(format: String(localized: "Installed at %@. Add ~/.local/bin to PATH if needed. External control remains governed by the switch above."), path.path)
                         } catch { cliMessage = error.localizedDescription }
                     }
-                    .disabled(cliInstallationState == .installed || cliInstallationState == .conflict)
+                    .disabled(cliInstallationState != .notInstalled && cliInstallationState != .repairable)
                     if cliInstallationState == .installed || cliInstallationState == .repairable {
                         Button("Uninstall") {
                             defer { refreshCLIInstallation() }
@@ -1424,6 +1424,7 @@ private struct TerminalPane: View {
         case .notInstalled: return String(localized: "Not installed")
         case .conflict: return String(localized: "Command name in use")
         case .repairable: return String(localized: "Needs repair")
+        case .linkedElsewhere: return String(localized: "Linked to another Glint")
         }
     }
 
@@ -1432,7 +1433,9 @@ private struct TerminalPane: View {
         case .installed:
             return String(localized: "Installed at ~/.local/bin/glint. Uninstall removes only the command link.")
         case .repairable:
-            return String(localized: "The CLI link points to another Glint installation. Install again to repair it, or uninstall the link.")
+            return String(localized: "The CLI link points to a missing Glint installation. Install again to repair it, or uninstall the link.")
+        case .linkedElsewhere:
+            return String(localized: "The CLI is linked to another existing Glint installation. It was left unchanged.")
         case .notInstalled:
             return String(localized: "Installs ~/.local/bin/glint. Installation does not enable external control.")
         case .conflict:

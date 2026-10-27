@@ -1,7 +1,7 @@
 import Foundation
 
 enum CLIInstallation {
-    enum State { case notInstalled, installed, repairable, conflict }
+    enum State { case notInstalled, installed, repairable, linkedElsewhere, conflict }
 
     static func state(executable: URL, directory: URL) -> State {
         let fm = FileManager.default
@@ -10,8 +10,10 @@ enum CLIInstallation {
             let target = URL(fileURLWithPath: existing, relativeTo: directory)
                 .standardizedFileURL.resolvingSymlinksInPath()
             if target == executable.standardizedFileURL.resolvingSymlinksInPath() { return .installed }
-            // Recognize only Glint's helper layout; foreign dangling links stay protected.
-            return target.path.hasSuffix("/Glint.app/Contents/Helpers/glint") ? .repairable : .conflict
+            // Only dangling Glint links are repairable. An existing Release/Debug
+            // installation is a valid owner of this link and must not be replaced.
+            guard target.path.hasSuffix("/Glint.app/Contents/Helpers/glint") else { return .conflict }
+            return fm.fileExists(atPath: target.path) ? .linkedElsewhere : .repairable
         }
         return fm.fileExists(atPath: destination.path) ? .conflict : .notInstalled
     }
@@ -27,6 +29,7 @@ enum CLIInstallation {
             throw NSError(domain: "GlintCLI", code: 3, userInfo: [NSLocalizedDescriptionKey:
                 String(localized: "CLI is already installed.")])
         case .conflict: throw occupiedPathError()
+        case .linkedElsewhere: throw linkedElsewhereError()
         case .notInstalled: break
         case .repairable:
             try fm.removeItem(at: directory.appendingPathComponent("glint"))
@@ -43,10 +46,16 @@ enum CLIInstallation {
             // Remove only the verified link, never the executable or another tool.
             try FileManager.default.removeItem(at: directory.appendingPathComponent("glint"))
         case .conflict: throw occupiedPathError()
+        case .linkedElsewhere: throw linkedElsewhereError()
         case .notInstalled:
             throw NSError(domain: "GlintCLI", code: 4, userInfo: [NSLocalizedDescriptionKey:
                 String(localized: "CLI is not installed.")])
         }
+    }
+
+    private static func linkedElsewhereError() -> NSError {
+        NSError(domain: "GlintCLI", code: 5, userInfo: [NSLocalizedDescriptionKey:
+            String(localized: "The CLI is linked to another existing Glint installation. It was left unchanged.")])
     }
 
     private static func occupiedPathError() -> NSError {

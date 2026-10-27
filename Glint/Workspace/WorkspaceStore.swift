@@ -2104,16 +2104,27 @@ final class WorkspaceStore: ObservableObject {
 
     /// Remote control may wake an ordinary shell without selecting its workspace.
     /// Agent restoration and one-shot commands require an explicit local mount.
-    private func remoteControlView(for key: WorkspacePaneKey) -> Result<GhosttySurfaceView, RemoteControlError> {
-        if let view = surfaceViews[key] {
-            guard view.hasLiveSurface || !view.hasPendingInitialInput else {
-                return .failure(.requiresLocalOpen)
-            }
-            return .success(view)
+    private func remoteControlView(
+        for key: WorkspacePaneKey,
+        source: WorkspaceControlSource = .local
+    ) -> Result<GhosttySurfaceView, RemoteControlError> {
+        let view: GhosttySurfaceView
+        if let existing = surfaceViews[key] {
+            view = existing
+        } else {
+            guard initialCommand(for: key) == nil else { return .failure(.requiresLocalOpen) }
+            let cwd = workspaces.first(where: { $0.id == key.workspace })?.panes[key.pane]?.workingDirectory
+            view = surfaceView(workspaceID: key.workspace, paneID: key.pane, cwd: cwd)
         }
-        guard initialCommand(for: key) == nil else { return .failure(.requiresLocalOpen) }
-        let cwd = workspaces.first(where: { $0.id == key.workspace })?.panes[key.pane]?.workingDirectory
-        return .success(surfaceView(workspaceID: key.workspace, paneID: key.pane, cwd: cwd))
+        guard view.hasLiveSurface || !view.hasPendingInitialInput else {
+            return .failure(.requiresLocalOpen)
+        }
+        // Check before ensureLiveSurface: creating a zero-sized shell now and
+        // restoring history on its eventual mount would invert output order.
+        if source == .local && view.requiresLocalScrollbackRestore {
+            return .failure(.requiresLocalOpen)
+        }
+        return .success(view)
     }
 
     private enum RemoteControlError: String, Error {
@@ -3213,7 +3224,7 @@ final class WorkspaceStore: ObservableObject {
             completion(.failure("unknown-pane")); return
         }
         let view: GhosttySurfaceView
-        switch remoteControlView(for: key) {
+        switch remoteControlView(for: key, source: .web) {
         case let .success(value): view = value
         case let .failure(error): completion(.failure(error.rawValue)); return
         }

@@ -126,6 +126,15 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     private var scrollbackID: String? {
         paneKey.map { ScrollbackArchive.fileID(forPaneKey: $0) }
     }
+    /// A local socket has no grid-size/restore completion handshake. Do not
+    /// start its shell or accept input until archived history can be replayed
+    /// by a local view (or by Web Remote's explicit grid + completion barrier).
+    var requiresLocalScrollbackRestore: Bool {
+        if pendingRestoreData != nil { return true }
+        guard surface == nil, scrollbackEnabled, let id = scrollbackID else { return false }
+        return ScrollbackArchive.read(id: id)?.isEmpty == false
+    }
+
     /// The exact history text echoed into this surface at restore (the prior
     /// session's saved scrollback). Kept verbatim so future snapshots can
     /// re-attach it as a STABLE prefix and capture only this session's NEW

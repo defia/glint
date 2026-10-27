@@ -1,6 +1,28 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Linked to another Glint": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已链接到另一个 Glint"
+          }
+        }
+      }
+    },
+    "The CLI is linked to another existing Glint installation. It was left unchanged.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLI 已链接到另一份仍然存在的 Glint 安装，未作更改。"
+          }
+        }
+      }
+    },
     "Needs repair": {
       "extractionState": "manual",
       "localizations": {
@@ -12,13 +34,13 @@
         }
       }
     },
-    "The CLI link points to another Glint installation. Install again to repair it, or uninstall the link.": {
+    "The CLI link points to a missing Glint installation. Install again to repair it, or uninstall the link.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "CLI 链接指向其他 Glint 安装位置。重新安装可修复链接，也可卸载此链接。"
+            "value": "CLI 链接指向已不存在的 Glint 安装位置。重新安装可修复链接，也可卸载此链接。"
           }
         }
       }
