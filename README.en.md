@@ -47,7 +47,13 @@ glint pane key '<pane-id>' down enter
 
 Use the full pane handle from the list. Reads and input preserve local workspace selection; only explicit `glint pane focus '<pane-id>'` switches focus. Reads return plain text unless `--json` is supplied; other commands return JSON. Use `glint --debug …` for a development build. You can also run `/Applications/Glint.app/Contents/Helpers/glint` directly, or use its `install` subcommand to install the link.
 
-Ordinary background terminals wake on demand without changing workspaces. If a terminal has a pending startup or agent restore command, the CLI and Web prompt you to open it in Glint first; remote access does not run those commands without a local view. The CLI also returns this prompt for pending scrollback restoration, before creating a shell or injecting input. Web Remote can still restore history at the browser’s explicit grid size. Custom `--socket` endpoints require a user-owned private directory (0700) and user-owned socket/token files (0600); token symlinks are rejected. Encoded requests are limited to 1 MiB, with explicit errors for oversized requests.
+The CLI can read and write background terminals that are already ready, and wake terminals with no pending history or startup tasks, without changing the local workspace.
+
+**Background access after restarting Glint:** scrollback restoration is enabled by default. If a background pane has an archive awaiting restoration after an app restart, both CLI reads and input return `pane-requires-local-open`. Open that terminal in Glint and let restoration complete before retrying; this also applies to reads without `--scrollback`. This version therefore cannot directly wake every archived background terminal after a restart through the CLI. Web Remote can still restore history at the browser’s explicit grid size.
+
+For pending startup or agent restore commands, both the CLI and Web prompt you to open the terminal in Glint first; remote access does not run those commands without a local view.
+
+Custom `--socket` endpoints require a user-owned private directory (0700) and user-owned socket/token files (0600); token symlinks are rejected. Encoded requests are limited to 1 MiB, with explicit errors for oversized requests.
 
 ## Upgrade & uninstall
 
